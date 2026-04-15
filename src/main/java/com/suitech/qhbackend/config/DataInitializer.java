@@ -35,7 +35,7 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         // Inicializar Equipos
-        equipmentRepository.deleteAll(); // Limpiar equipos previos para asegurar la lista exacta
+        // YA NO USAMOS equipmentRepository.deleteAll() para no perder las coordenadas guardadas por el usuario
         
         List<String> equipmentNames = Arrays.asList(
                 "D8T-1", "D8T-2", "D8T-3", "D8T-4", "D8T-5", "D8T-6",
@@ -47,19 +47,28 @@ public class DataInitializer implements CommandLineRunner {
                 "Volquete #80", "Volquete #82", "Volquete #84"
             );
 
+            int createdCount = 0;
             for (String name : equipmentNames) {
-                Equipment eq = Equipment.builder()
-                        .name(name)
-                        .latitude(-17.459974)
-                        .longitude(-70.801105)
-                        .color(getColorByCategory(name))
-                        .status(com.suitech.qhbackend.model.EquipmentStatus.OPERATIVO)
-                        .comment("Equipo inicializado por el sistema")
-                        .lastUpdatedBy("System")
-                        .build();
-                equipmentRepository.save(eq);
+                // Solo insertamos si el equipo no existe por nombre
+                if (!equipmentRepository.existsByName(name)) {
+                    Equipment eq = Equipment.builder()
+                            .name(name)
+                            .latitude(-17.459974)
+                            .longitude(-70.801105)
+                            .color(getColorByCategory(name))
+                            .status(com.suitech.qhbackend.model.EquipmentStatus.OPERATIVO)
+                            .comment("Equipo inicializado por el sistema")
+                            .lastUpdatedBy("System")
+                            .build();
+                    equipmentRepository.save(eq);
+                    createdCount++;
+                }
             }
-            System.out.println("Se han registrado " + equipmentNames.size() + " equipos con colores por categoría.");
+            if (createdCount > 0) {
+                System.out.println("Se han registrado " + createdCount + " nuevos equipos.");
+            } else {
+                System.out.println("No se requirieron nuevos equipos, la flota está al día.");
+            }
     }
 
     private String getColorByCategory(String name) {
