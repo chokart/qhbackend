@@ -44,7 +44,9 @@ public class DataInitializer implements CommandLineRunner {
                 "Exc. 324 DL1", "Exc. 324 DL2", "Exc. Kom PC-220", "Exc. 326 DL1", "Exc. 326 DL2", "Exc. 336-1", "Exc. 336-2",
                 "Cargador 988 F3", "Cargador 994K CAT", "Motoniveladora 16H", "Retroexcavadora 45",
                 "Rodillo #6", "Rodillo #7", "Rodillo #8", "Rodillo #9", "Rodillo #10", "Rodillo #11", "Rodillo #12",
-                "Volquete #80", "Volquete #82", "Volquete #84"
+                "Volquete #80", "Volquete #82", "Volquete #84",
+                "BATERIA 1", "BATERIA 2", "BATERIA 3", "BATERIA 4", "BATERIA 5", "BATERIA 6", "BATERIA 7", "BATERIA 8",
+                "NIDO12800", "NIDO22800", "NIDO12101", "NIDO22102"
             );
 
             int createdCount = 0;
@@ -72,6 +74,7 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private String getColorByCategory(String name) {
+        if (name.startsWith("BATERIA") || name.startsWith("NIDO")) return "#00cec9"; // Cian para Hidrociclones
         if (name.startsWith("D8")) return "#ff4757"; // Rojo
         if (name.startsWith("D9")) return "#2ed573"; // Verde
         if (name.startsWith("D10")) return "#1e90ff"; // Azul
