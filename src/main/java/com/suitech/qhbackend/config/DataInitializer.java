@@ -20,6 +20,7 @@ public class DataInitializer implements CommandLineRunner {
     private final UserRepository userRepository;
     private final EquipmentRepository equipmentRepository;
     private final com.suitech.qhbackend.repository.CanchaRepository canchaRepository;
+    private final com.suitech.qhbackend.repository.CanchaCapaRepository canchaCapaRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -52,6 +53,25 @@ public class DataInitializer implements CommandLineRunner {
         }
         if (canchasCreated > 0) {
             System.out.println("Se han inicializado " + canchasCreated + " canchas.");
+        }
+
+        // Inicializar Canchas por Capas (1 a 30)
+        int canchasCapasCreated = 0;
+        for (int i = 1; i <= 30; i++) {
+            if (!canchaCapaRepository.existsByNumber(i)) {
+                com.suitech.qhbackend.model.CanchaCapa canchaCapa = com.suitech.qhbackend.model.CanchaCapa.builder()
+                        .number(i)
+                        .currentCapa(1) // Capa inicial por defecto
+                        .status(com.suitech.qhbackend.model.CanchaStatus.STAND_BY)
+                        .comment("Cancha por capa inicializada por el sistema")
+                        .lastUpdatedBy("System")
+                        .build();
+                canchaCapaRepository.save(canchaCapa);
+                canchasCapasCreated++;
+            }
+        }
+        if (canchasCapasCreated > 0) {
+            System.out.println("Se han inicializado " + canchasCapasCreated + " canchas por capas.");
         }
 
         // Inicializar Equipos

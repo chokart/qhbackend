@@ -37,6 +37,7 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/v1/admin/**").hasAuthority("ADMIN")
                         .requestMatchers("/api/v1/equipment/**").authenticated()
                         .requestMatchers("/api/v1/canchas/**").authenticated()
+                        .requestMatchers("/api/v1/canchas-capas/**").authenticated()
                         .requestMatchers("/api/v1/areas/**").authenticated()
                         .anyRequest().authenticated()
                 )
