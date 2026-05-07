@@ -42,7 +42,7 @@ public class DataInitializer implements CommandLineRunner {
             if (!canchaRepository.existsByNumber(i)) {
                 com.suitech.qhbackend.model.Cancha cancha = com.suitech.qhbackend.model.Cancha.builder()
                         .number(i)
-                        .currentHeight(1210.0) // Altura inicial por defecto
+                        .currentHeight(1050.0) // Altura inicial por defecto
                         .status(com.suitech.qhbackend.model.CanchaStatus.STAND_BY)
                         .comment("Cancha inicializada por el sistema")
                         .lastUpdatedBy("System")
