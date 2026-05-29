@@ -30,6 +30,9 @@ public class Cancha {
     @Column(columnDefinition = "TEXT")
     private String comment;
     
+    private String assignedEquipment;
+    private String operatorName;
+    
     private String lastUpdatedBy;
     private LocalDateTime updatedAt;
 

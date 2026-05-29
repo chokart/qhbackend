@@ -36,6 +36,8 @@ public class CanchaController {
         if (request.getCurrentHeight() != null) cancha.setCurrentHeight(request.getCurrentHeight());
         if (request.getStatus() != null) cancha.setStatus(request.getStatus());
         if (request.getComment() != null) cancha.setComment(request.getComment());
+        if (request.getAssignedEquipment() != null) cancha.setAssignedEquipment(request.getAssignedEquipment());
+        if (request.getOperatorName() != null) cancha.setOperatorName(request.getOperatorName());
         
         cancha.setLastUpdatedBy(auth.getName());
         return ResponseEntity.ok(repository.save(cancha));
