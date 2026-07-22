@@ -7,4 +7,6 @@ import java.util.Optional;
 public interface OperatorRepository extends JpaRepository<Operator, Integer> {
     Optional<Operator> findByName(String name);
     boolean existsByName(String name);
+    Optional<Operator> findByCode(String code);
+    boolean existsByCode(String code);
 }
