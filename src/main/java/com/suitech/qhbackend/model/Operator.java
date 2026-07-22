@@ -22,4 +22,8 @@ public class Operator {
     
     @Column(nullable = false)
     private String name;
+
+    @ManyToOne
+    @JoinColumn(name = "group_id")
+    private Group group;
 }

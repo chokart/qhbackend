@@ -1,17 +1,21 @@
 package com.suitech.qhbackend.config;
 
 import com.suitech.qhbackend.model.Equipment;
+import com.suitech.qhbackend.model.Group;
+import com.suitech.qhbackend.model.Operator;
 import com.suitech.qhbackend.model.Role;
 import com.suitech.qhbackend.model.User;
 import com.suitech.qhbackend.repository.EquipmentRepository;
+import com.suitech.qhbackend.repository.GroupRepository;
+import com.suitech.qhbackend.repository.OperatorRepository;
 import com.suitech.qhbackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.util.Arrays;
-import java.util.List;
+import java.time.LocalDate;
+import java.util.*;
 
 @Configuration
 @RequiredArgsConstructor
@@ -21,154 +25,195 @@ public class DataInitializer implements CommandLineRunner {
     private final EquipmentRepository equipmentRepository;
     private final com.suitech.qhbackend.repository.CanchaRepository canchaRepository;
     private final com.suitech.qhbackend.repository.CanchaCapaRepository canchaCapaRepository;
-    private final com.suitech.qhbackend.repository.OperatorRepository operatorRepository;
+    private final OperatorRepository operatorRepository;
+    private final GroupRepository groupRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
     public void run(String... args) throws Exception {
-        // Inicializar Operadores con Código
+        // 1. Inicializar 12 Guardias con sus programas y fechas de anclaje
+        String p1Json = "[\"D\",\"D\",\"D\",\"D\",\"D\",\"L\",\"L\",\"L\",\"N\",\"N\",\"N\",\"L\",\"D\",\"D\",\"D\",\"D\",\"L\",\"L\",\"N\",\"N\",\"N\",\"N\",\"L\",\"L\",\"L\",\"L\",\"L\",\"L\"]";
+        String p2Json = "[\"N\",\"N\",\"N\",\"N\",\"N\",\"L\",\"L\",\"L\",\"D\",\"D\",\"D\",\"D\",\"D\",\"L\",\"L\",\"L\",\"N\",\"N\",\"N\",\"N\",\"N\",\"L\",\"L\",\"L\",\"D\",\"D\",\"D\",\"D\",\"D\",\"L\",\"L\",\"L\",\"L\",\"N\",\"N\",\"N\",\"N\",\"L\",\"L\",\"L\",\"L\",\"D\",\"D\",\"D\",\"D\",\"L\",\"L\",\"L\",\"L\"]";
+
+        Object[][] groupDefs = {
+            {"GUARDIA 1", "#4f46e5", "PROGRAMA_1", LocalDate.of(2026, 7, 1), p1Json},
+            {"GUARDIA 2", "#06b6d4", "PROGRAMA_1", LocalDate.of(2026, 7, 8), p1Json},
+            {"GUARDIA 3", "#10b981", "PROGRAMA_1", LocalDate.of(2026, 7, 15), p1Json},
+            {"GUARDIA 4", "#f59e0b", "PROGRAMA_1", LocalDate.of(2026, 7, 22), p1Json},
+            {"GUARDIA 5", "#ec4899", "PROGRAMA_1", LocalDate.of(2026, 7, 5), p1Json},
+            {"GUARDIA 6", "#8b5cf6", "PROGRAMA_1", LocalDate.of(2026, 7, 12), p1Json},
+            {"GUARDIA 7", "#3b82f6", "PROGRAMA_2", LocalDate.of(2026, 7, 1), p2Json},
+            {"GUARDIA 8", "#14b8a6", "PROGRAMA_2", LocalDate.of(2026, 7, 8), p2Json},
+            {"GUARDIA 9", "#84cc16", "PROGRAMA_2", LocalDate.of(2026, 7, 15), p2Json},
+            {"GUARDIA 10", "#eab308", "PROGRAMA_2", LocalDate.of(2026, 7, 22), p2Json},
+            {"GUARDIA 11", "#f97316", "PROGRAMA_2", LocalDate.of(2026, 7, 29), p2Json},
+            {"GUARDIA 12", "#ef4444", "PROGRAMA_2", LocalDate.of(2026, 7, 5), p2Json}
+        };
+
+        Map<String, Group> groupMap = new HashMap<>();
+        for (Object[] gDef : groupDefs) {
+            String gName = (String) gDef[0];
+            Group group = groupRepository.findByName(gName).orElseGet(() ->
+                groupRepository.save(Group.builder()
+                    .name(gName)
+                    .color((String) gDef[1])
+                    .programType((String) gDef[2])
+                    .startDate((LocalDate) gDef[3])
+                    .patternJson((String) gDef[4])
+                    .build())
+            );
+            groupMap.put(gName, group);
+        }
+
+        // 2. Inicializar Operadores con Código y asignación exacta de Guardia
         String[][] rawOperators = {
-            {"72322", "MARIN VILLANUEVA, EDUARDO"},
-            {"93606", "AGUILAR SARAVIA, ALBERTO"},
-            {"10462", "ARENAS CHAVEZ, MARCEL"},
-            {"94932", "CALIZAYA SALCEDO, JULIO"},
-            {"21801", "FLOR PEÑALOZA, MANUEL"},
-            {"94075", "HUANACO MACOAGA, JOSE"},
-            {"10379", "HUAYTA PARICOTO, HILARIO"},
-            {"93401", "JUAREZ PINTO, EDMUNDO"},
-            {"99511", "LA JARA ANDIA, CESAR"},
-            {"96431", "MAMANI MASCO, MIGUEL"},
-            {"99146", "CALDERON MAQUERA, NESTOR"},
-            {"96889", "PEÑALOZA PUMA, CELEDONIO"},
-            {"96067", "QUISPE FLORES, JIMMY"},
-            {"96247", "RADO LUNA, ISAUL"},
-            {"103041", "CHAVEZ CABANILLAS JUAN NOEL"},
-            {"10479", "ARROYO MADERA, LUIS"},
-            {"96249", "BALLON VALDIVIA, NOE"},
-            {"93085", "CHECCA QUISPE, HERNAN"},
-            {"93610", "HUALLPA CALSIN, MARTIN"},
-            {"94818", "HUAMANI CARDENAS, PABLO"},
-            {"21864", "GALLARDO BRICEÑO EDMUNDO"},
-            {"10899", "JUAREZ CHIPANA, VICTOR"},
-            {"96291", "LIMA YANQUE, MIGUEL"},
-            {"95349", "MANRIQUE TEJADA, LEONIDAS"},
-            {"99519", "MAMANI FLORES, HENRY"},
-            {"100476", "MAMANI RAMOS ROLANDO"},
-            {"21816", "PAREDES FELICIANO, LEONARDO"},
-            {"93608", "ROSPIGLIOSI MAMANI, VICTOR"},
-            {"101669", "GONZA JAHUIRA EDGARD"},
-            {"91168", "VEGA CALATAYUD, MOISES"},
-            {"72323", "ASQUI JULI, FELIX"},
-            {"92793", "AGUILAR AROS, FERNANDO"},
-            {"21663", "ALVAREZ BAUTISTA, ROLANDO"},
-            {"93108", "ALVAREZ CARMONA, ROSALIO"},
-            {"10924", "ARANA ORTEGA, ELVIS"},
-            {"93602", "CISNEROS FLORES, EDGAR"},
-            {"101663", "CUTIPA ARCE VICTOR JESUS"},
-            {"96242", "HURTADO GOMEZ, EDWIN"},
-            {"11004", "LOVON GARCIA, ELMER"},
-            {"96994", "PAREDES PEREZ, ROLANDO"},
-            {"97080", "PEREZ NAHUINCHA, MILTON"},
-            {"91851", "POMA CLEMENTE, JOEL"},
-            {"93572", "RIOS VARGAS, YAIR"},
-            {"93856", "RIVERA PINTO, MARIO"},
-            {"95348", "ROMERO MACHACA, ROY"},
-            {"98064", "TREBEJO BALDEON, DENNIS"},
-            {"96261", "ALCOCER AYALA, EDWIN"},
-            {"96073", "CHOQUEHUANCA CRUZ, LUCIO"},
-            {"10911", "CHUCTAYA CHUCTAYA, GERMAN"},
-            {"99143", "CHURA AYCACHI, JAVIER"},
-            {"91167", "FARJE NAPA, JAVIER"},
-            {"93317", "GARNICA PALMA, ABEL"},
-            {"93940", "LUCANO HUACAN, CARLOS"},
-            {"10971", "MENDOZA MOSCOSO, WILFREDO"},
-            {"91383", "MONCADA CHAVEZ, JUAN"},
-            {"97028", "PAREDES ARAGON, CARLOS"},
-            {"93868", "ROSADO VALERIANO, JONATHAN"},
-            {"98066", "AGUILAR MENDOZA, ELVIS"},
-            {"99291", "TORRES HUAYNA, WILSON"},
-            {"98476", "SIXTO QUISPE, ZAMIR"},
-            {"92434", "LOZA QUISPE, OSWALDO"},
-            {"104777", "NAVARRO RONDÓN, GUSTAVO LEANDRO"},
-            {"98477", "MAMANI NINA, PEDRO"},
-            {"101667", "MARON MARON, ISIDRO LUIS"},
-            {"99147", "MULLAYA ESCARCENA, JULIO"},
-            {"100493", "ORTIZ BALLON, DIEGO"},
-            {"103979", "CUTIPA ARCE, EFRAIN"},
-            {"104721", "CHARCA CHULLUNQUIA, FREDY"},
-            {"98063", "APAZA MAMANI, JUAN"},
-            {"101679", "ARANIBAR GALDOS, OSMAR JULIO"},
-            {"101773", "BARRIGA LIZANA, JEAN PIERRE"},
-            {"95346", "BEDREGAL BARRIGA, ALFREDO"},
-            {"104717", "CHOQUEHUANCA ARTETA, LUIS ANTONIO"},
-            {"102911", "CHAUPE CCAHUA ALEXANDER"},
-            {"98060", "MAMANI PORTUGAL, JORGE"},
-            {"92471", "QUIRPER JUAREZ, JOAN"},
-            {"91470", "MALLMA ACUÑA, MIGUEL"},
-            {"101915", "CARNERO LLERENA, DERLING"},
-            {"96927", "ESQUICHE ROJAS, JUAN"},
-            {"99502", "HUAYHUA CONDORI, ANGEL"},
-            {"100495", "MAMANI RAMOS, LUZMARYED"},
-            {"102909", "CCAPA MAGAÑO EDGAR"},
-            {"99145", "PAREDES PERALTA, DAVID"},
-            {"101361", "POMATANTA QUIROZ JUSTINIANO"},
-            {"102912", "PAIMA VASQUEZ, NEWTON"},
-            {"104719", "POZO CHUCHULLO, AMILCAR"},
-            {"95575", "SALAS HUARCA, LUIS JOEL"},
-            {"99515", "BASURTO VILLEGAS, JESUS"},
-            {"104889", "SURCO CHOQUE CHARLES JHON"},
-            {"104790", "CONZA ALARCON, ROSARIO MILAGROS"},
-            {"102910", "CONDORI MAMANI FELIX"},
-            {"102913", "PAREDES CRUZ MARCELINO"},
-            {"92594", "MAMANI ALVAREZ, PEDRO"},
-            {"95244", "MONTES SANCHEZ, BALTAZAR"},
-            {"102890", "QUISPE VALERIANO, WASHINGTON"},
-            {"101699", "APAZA TICONA ROGER"},
-            {"103039", "CACYA PEREZ GABRIEL ARCANGEL"},
-            {"98085", "CHUQUINAIRA SANA, MIGUEL"},
-            {"102057", "CONDORCHOA RODRIGUEZ GELBER LUIS"},
-            {"99348", "CUBA CUSIPUMA, ERICK LUIS"},
-            {"104980", "HUARZA HUISA, JHONNY IVAN"},
-            {"103384", "JARA CCOA, SANDRA LIZBET"},
-            {"99432", "MENDOZA SALAS, WALTER"},
-            {"99344", "TINTAYA QUISPE, HUGO MARCIAL"},
-            {"98082", "CAPIA CONDORI, JAVIER ROGER"},
-            {"104748", "CASTILLO QUINTANA, JOSSELIN"},
-            {"101685", "CHOQUE CORDOVA, DAI EVANS"},
-            {"101035", "LEEPHE CALDERON, MARCO"},
-            {"101660", "MAMANI COAGUILA SANTOS GUILLERMO"},
-            {"98295", "MAYHUA BARCENA, ERICK"},
-            {"100400", "SOTO HUAMAN JAVIER"},
-            {"98385", "VIZCARRA VARGAS, VIDAL"},
-            {"99514", "ZEBALLOS AYALA, ELIZALDE"},
-            {"100961", "AROCUTIPA CATACORA, JHON MANUEL"},
-            {"91819", "AROAPAZA PALOMINO JULIO"},
-            {"105116", "ARPASI PAUCAR, EDGAR"},
-            {"97458", "CHOQUE MAMANI, WELMER"},
-            {"95783", "MANIHUARI CARRERA, AGUSTIN"},
-            {"98681", "NUÑONCCA YAULI, EBERTH"},
-            {"103797", "MORALES ROSAS, EDWIN"},
-            {"99387", "QUISPE TACORA, JAIME"},
-            {"103311", "VALDEZ GONZALES, DANIEL ADRIÁN"},
-            {"98580", "TRUJILLO OTAEGUI JUAN CARLOS"},
-            {"96310", "CHAVEZ VALDIVIA HENRY PAUL"},
-            {"96385", "GONZALES LIENDO LEONEL FABRIZZIO"},
-            {"96841", "DIANDERAS ZAPANA EFRAIN"},
-            {"97151", "SALCEDO ROSAS DANIEL"}
+            {"72322", "MARIN VILLANUEVA, EDUARDO", "GUARDIA 1"},
+            {"93606", "AGUILAR SARAVIA, ALBERTO", "GUARDIA 1"},
+            {"10462", "ARENAS CHAVEZ, MARCEL", "GUARDIA 1"},
+            {"94932", "CALIZAYA SALCEDO, JULIO", "GUARDIA 1"},
+            {"21801", "FLOR PEÑALOZA, MANUEL", "GUARDIA 1"},
+            {"94075", "HUANACO MACOAGA, JOSE", "GUARDIA 1"},
+            {"10379", "HUAYTA PARICOTO, HILARIO", "GUARDIA 1"},
+            {"93401", "JUAREZ PINTO, EDMUNDO", "GUARDIA 1"},
+            {"99511", "LA JARA ANDIA, CESAR", "GUARDIA 1"},
+            {"96431", "MAMANI MASCO, MIGUEL", "GUARDIA 1"},
+            {"99146", "CALDERON MAQUERA, NESTOR", "GUARDIA 1"},
+            {"96889", "PEÑALOZA PUMA, CELEDONIO", "GUARDIA 1"},
+            {"96067", "QUISPE FLORES, JIMMY", "GUARDIA 1"},
+            {"96247", "RADO LUNA, ISAUL", "GUARDIA 1"},
+            {"103041", "CHAVEZ CABANILLAS JUAN NOEL", "GUARDIA 2"},
+            {"10479", "ARROYO MADERA, LUIS", "GUARDIA 2"},
+            {"96249", "BALLON VALDIVIA, NOE", "GUARDIA 2"},
+            {"93085", "CHECCA QUISPE, HERNAN", "GUARDIA 2"},
+            {"93610", "HUALLPA CALSIN, MARTIN", "GUARDIA 2"},
+            {"94818", "HUAMANI CARDENAS, PABLO", "GUARDIA 2"},
+            {"21864", "GALLARDO BRICEÑO EDMUNDO", "GUARDIA 2"},
+            {"10899", "JUAREZ CHIPANA, VICTOR", "GUARDIA 2"},
+            {"96291", "LIMA YANQUE, MIGUEL", "GUARDIA 2"},
+            {"95349", "MANRIQUE TEJADA, LEONIDAS", "GUARDIA 2"},
+            {"99519", "MAMANI FLORES, HENRY", "GUARDIA 2"},
+            {"100476", "MAMANI RAMOS ROLANDO", "GUARDIA 2"},
+            {"21816", "PAREDES FELICIANO, LEONARDO", "GUARDIA 2"},
+            {"93608", "ROSPIGLIOSI MAMANI, VICTOR", "GUARDIA 2"},
+            {"101669", "GONZA JAHUIRA EDGARD", "GUARDIA 2"},
+            {"91168", "VEGA CALATAYUD, MOISES", "GUARDIA 2"},
+            {"72323", "ASQUI JULI, FELIX", "GUARDIA 3"},
+            {"92793", "AGUILAR AROS, FERNANDO", "GUARDIA 3"},
+            {"21663", "ALVAREZ BAUTISTA, ROLANDO", "GUARDIA 3"},
+            {"93108", "ALVAREZ CARMONA, ROSALIO", "GUARDIA 3"},
+            {"10924", "ARANA ORTEGA, ELVIS", "GUARDIA 3"},
+            {"93602", "CISNEROS FLORES, EDGAR", "GUARDIA 3"},
+            {"101663", "CUTIPA ARCE VICTOR JESUS", "GUARDIA 3"},
+            {"96242", "HURTADO GOMEZ, EDWIN", "GUARDIA 3"},
+            {"11004", "LOVON GARCIA, ELMER", "GUARDIA 3"},
+            {"96994", "PAREDES PEREZ, ROLANDO", "GUARDIA 3"},
+            {"97080", "PEREZ NAHUINCHA, MILTON", "GUARDIA 3"},
+            {"91851", "POMA CLEMENTE, JOEL", "GUARDIA 3"},
+            {"93572", "RIOS VARGAS, YAIR", "GUARDIA 3"},
+            {"93856", "RIVERA PINTO, MARIO", "GUARDIA 3"},
+            {"95348", "ROMERO MACHACA, ROY", "GUARDIA 4"},
+            {"98064", "TREBEJO BALDEON, DENNIS", "GUARDIA 4"},
+            {"96261", "ALCOCER AYALA, EDWIN", "GUARDIA 4"},
+            {"96073", "CHOQUEHUANCA CRUZ, LUCIO", "GUARDIA 4"},
+            {"10911", "CHUCTAYA CHUCTAYA, GERMAN", "GUARDIA 4"},
+            {"99143", "CHURA AYCACHI, JAVIER", "GUARDIA 4"},
+            {"91167", "FARJE NAPA, JAVIER", "GUARDIA 4"},
+            {"93317", "GARNICA PALMA, ABEL", "GUARDIA 4"},
+            {"93940", "LUCANO HUACAN, CARLOS", "GUARDIA 4"},
+            {"10971", "MENDOZA MOSCOSO, WILFREDO", "GUARDIA 4"},
+            {"91383", "MONCADA CHAVEZ, JUAN", "GUARDIA 4"},
+            {"97028", "PAREDES ARAGON, CARLOS", "GUARDIA 4"},
+            {"93868", "ROSADO VALERIANO, JONATHAN", "GUARDIA 4"},
+            {"98066", "AGUILAR MENDOZA, ELVIS", "GUARDIA 4"},
+            {"99291", "TORRES HUAYNA, WILSON", "GUARDIA 4"},
+            {"98476", "SIXTO QUISPE, ZAMIR", "GUARDIA 4"},
+            {"92434", "LOZA QUISPE, OSWALDO", "GUARDIA 5"},
+            {"104777", "NAVARRO RONDÓN, GUSTAVO LEANDRO", "GUARDIA 5"},
+            {"98477", "MAMANI NINA, PEDRO", "GUARDIA 5"},
+            {"101667", "MARON MARON, ISIDRO LUIS", "GUARDIA 5"},
+            {"99147", "MULLAYA ESCARCENA, JULIO", "GUARDIA 5"},
+            {"100493", "ORTIZ BALLON, DIEGO", "GUARDIA 5"},
+            {"103979", "CUTIPA ARCE, EFRAIN", "GUARDIA 5"},
+            {"104721", "CHARCA CHULLUNQUIA, FREDY", "GUARDIA 5"},
+            {"98063", "APAZA MAMANI, JUAN", "GUARDIA 6"},
+            {"101679", "ARANIBAR GALDOS, OSMAR JULIO", "GUARDIA 6"},
+            {"101773", "BARRIGA LIZANA, JEAN PIERRE", "GUARDIA 6"},
+            {"95346", "BEDREGAL BARRIGA, ALFREDO", "GUARDIA 6"},
+            {"104717", "CHOQUEHUANCA ARTETA, LUIS ANTONIO", "GUARDIA 6"},
+            {"102911", "CHAUPE CCAHUA ALEXANDER", "GUARDIA 6"},
+            {"98060", "MAMANI PORTUGAL, JORGE", "GUARDIA 6"},
+            {"92471", "QUIRPER JUAREZ, JOAN", "GUARDIA 6"},
+            {"91470", "MALLMA ACUÑA, MIGUEL", "GUARDIA 6"},
+            {"101915", "CARNERO LLERENA, DERLING", "GUARDIA 7"},
+            {"96927", "ESQUICHE ROJAS, JUAN", "GUARDIA 7"},
+            {"99502", "HUAYHUA CONDORI, ANGEL", "GUARDIA 7"},
+            {"100495", "MAMANI RAMOS, LUZMARYED", "GUARDIA 7"},
+            {"102909", "CCAPA MAGAÑO EDGAR", "GUARDIA 7"},
+            {"99145", "PAREDES PERALTA, DAVID", "GUARDIA 7"},
+            {"101361", "POMATANTA QUIROZ JUSTINIANO", "GUARDIA 7"},
+            {"102912", "PAIMA VASQUEZ, NEWTON", "GUARDIA 7"},
+            {"104719", "POZO CHUCHULLO, AMILCAR", "GUARDIA 7"},
+            {"95575", "SALAS HUARCA, LUIS JOEL", "GUARDIA 7"},
+            {"99515", "BASURTO VILLEGAS, JESUS", "GUARDIA 8"},
+            {"104889", "SURCO CHOQUE CHARLES JHON", "GUARDIA 8"},
+            {"104790", "CONZA ALARCON, ROSARIO MILAGROS", "GUARDIA 8"},
+            {"102910", "CONDORI MAMANI FELIX", "GUARDIA 8"},
+            {"102913", "PAREDES CRUZ MARCELINO", "GUARDIA 8"},
+            {"92594", "MAMANI ALVAREZ, PEDRO", "GUARDIA 8"},
+            {"95244", "MONTES SANCHEZ, BALTAZAR", "GUARDIA 8"},
+            {"102890", "QUISPE VALERIANO, WASHINGTON", "GUARDIA 8"},
+            {"101699", "APAZA TICONA ROGER", "GUARDIA 9"},
+            {"103039", "CACYA PEREZ GABRIEL ARCANGEL", "GUARDIA 9"},
+            {"98085", "CHUQUINAIRA SANA, MIGUEL", "GUARDIA 9"},
+            {"102057", "CONDORCHOA RODRIGUEZ GELBER LUIS", "GUARDIA 9"},
+            {"99348", "CUBA CUSIPUMA, ERICK LUIS", "GUARDIA 9"},
+            {"104980", "HUARZA HUISA, JHONNY IVAN", "GUARDIA 9"},
+            {"103384", "JARA CCOA, SANDRA LIZBET", "GUARDIA 9"},
+            {"99432", "MENDOZA SALAS, WALTER", "GUARDIA 9"},
+            {"99344", "TINTAYA QUISPE, HUGO MARCIAL", "GUARDIA 9"},
+            {"98082", "CAPIA CONDORI, JAVIER ROGER", "GUARDIA 10"},
+            {"104748", "CASTILLO QUINTANA, JOSSELIN", "GUARDIA 10"},
+            {"101685", "CHOQUE CORDOVA, DAI EVANS", "GUARDIA 10"},
+            {"101035", "LEEPHE CALDERON, MARCO", "GUARDIA 10"},
+            {"101660", "MAMANI COAGUILA SANTOS GUILLERMO", "GUARDIA 10"},
+            {"98295", "MAYHUA BARCENA, ERICK", "GUARDIA 10"},
+            {"100400", "SOTO HUAMAN JAVIER", "GUARDIA 10"},
+            {"98385", "VIZCARRA VARGAS, VIDAL", "GUARDIA 10"},
+            {"99514", "ZEBALLOS AYALA, ELIZALDE", "GUARDIA 10"},
+            {"100961", "AROCUTIPA CATACORA, JHON MANUEL", "GUARDIA 11"},
+            {"91819", "AROAPAZA PALOMINO JULIO", "GUARDIA 11"},
+            {"105116", "ARPASI PAUCAR, EDGAR", "GUARDIA 11"},
+            {"97458", "CHOQUE MAMANI, WELMER", "GUARDIA 11"},
+            {"95783", "MANIHUARI CARRERA, AGUSTIN", "GUARDIA 11"},
+            {"98681", "NUÑONCCA YAULI, EBERTH", "GUARDIA 11"},
+            {"103797", "MORALES ROSAS, EDWIN", "GUARDIA 11"},
+            {"99387", "QUISPE TACORA, JAIME", "GUARDIA 11"},
+            {"103311", "VALDEZ GONZALES, DANIEL ADRIÁN", "GUARDIA 11"},
+            {"98580", "TRUJILLO OTAEGUI JUAN CARLOS", "GUARDIA 12"},
+            {"96310", "CHAVEZ VALDIVIA HENRY PAUL", "GUARDIA 12"},
+            {"96385", "GONZALES LIENDO LEONEL FABRIZZIO", "GUARDIA 12"},
+            {"96841", "DIANDERAS ZAPANA EFRAIN", "GUARDIA 12"},
+            {"97151", "SALCEDO ROSAS DANIEL", "GUARDIA 12"}
         };
 
         for (String[] opData : rawOperators) {
             String code = opData[0];
             String name = opData[1];
-            java.util.Optional<com.suitech.qhbackend.model.Operator> existing = operatorRepository.findByName(name);
+            String gName = opData[2];
+            Group assignedGroup = groupMap.get(gName);
+
+            Optional<Operator> existing = operatorRepository.findByName(name);
             if (existing.isPresent()) {
-                com.suitech.qhbackend.model.Operator op = existing.get();
-                if (op.getCode() == null || !op.getCode().equals(code)) {
-                    op.setCode(code);
-                    operatorRepository.save(op);
-                }
-            } else if (!operatorRepository.existsByCode(code)) {
-                operatorRepository.save(new com.suitech.qhbackend.model.Operator(null, code, name));
+                Operator op = existing.get();
+                op.setCode(code);
+                op.setGroup(assignedGroup);
+                operatorRepository.save(op);
+            } else {
+                operatorRepository.save(Operator.builder()
+                        .code(code)
+                        .name(name)
+                        .group(assignedGroup)
+                        .build());
             }
         }
 
@@ -180,50 +225,37 @@ public class DataInitializer implements CommandLineRunner {
                     .role(Role.ADMIN)
                     .build();
             userRepository.save(admin);
-            System.out.println("Usuario Administrador inicial creado: admin / quebrada");
         }
 
         // Inicializar Canchas (1 a 30)
         int canchasCreated = 0;
         for (int i = 1; i <= 30; i++) {
             if (!canchaRepository.existsByNumber(i)) {
-                com.suitech.qhbackend.model.Cancha cancha = com.suitech.qhbackend.model.Cancha.builder()
+                canchaRepository.save(com.suitech.qhbackend.model.Cancha.builder()
                         .number(i)
-                        .currentHeight(1050.0) // Altura inicial por defecto
+                        .currentHeight(1050.0)
                         .status(com.suitech.qhbackend.model.CanchaStatus.STAND_BY)
                         .comment("Cancha inicializada por el sistema")
                         .lastUpdatedBy("System")
-                        .build();
-                canchaRepository.save(cancha);
+                        .build());
                 canchasCreated++;
             }
         }
-        if (canchasCreated > 0) {
-            System.out.println("Se han inicializado " + canchasCreated + " canchas.");
-        }
 
         // Inicializar Canchas por Capas (1 a 30)
-        int canchasCapasCreated = 0;
         for (int i = 1; i <= 30; i++) {
             if (!canchaCapaRepository.existsByNumber(i)) {
-                com.suitech.qhbackend.model.CanchaCapa canchaCapa = com.suitech.qhbackend.model.CanchaCapa.builder()
+                canchaCapaRepository.save(com.suitech.qhbackend.model.CanchaCapa.builder()
                         .number(i)
-                        .currentCapa(1) // Capa inicial por defecto
+                        .currentCapa(1)
                         .status(com.suitech.qhbackend.model.CanchaStatus.STAND_BY)
                         .comment("Cancha por capa inicializada por el sistema")
                         .lastUpdatedBy("System")
-                        .build();
-                canchaCapaRepository.save(canchaCapa);
-                canchasCapasCreated++;
+                        .build());
             }
-        }
-        if (canchasCapasCreated > 0) {
-            System.out.println("Se han inicializado " + canchasCapasCreated + " canchas por capas.");
         }
 
         // Inicializar Equipos
-        // YA NO USAMOS equipmentRepository.deleteAll() para no perder las coordenadas guardadas por el usuario
-        
         List<String> equipmentNames = Arrays.asList(
                 "D8T-1", "D8T-2", "D8T-3", "D8T-4", "D8T-5", "D8T-6",
                 "D8-1", "D8-2", "D9-1", "D9-2", "D9-3", "D9-4", "D9-5",
@@ -234,48 +266,34 @@ public class DataInitializer implements CommandLineRunner {
                 "Volquete #80", "Volquete #82", "Volquete #84",
                 "BATERIA 1", "BATERIA 2", "BATERIA 3", "BATERIA 4", "BATERIA 5", "BATERIA 6", "BATERIA 7", "BATERIA 8",
                 "NIDO12800", "NIDO22800", "NIDO12101", "NIDO22102"
-            );
+        );
 
-            int createdCount = 0;
-            for (String name : equipmentNames) {
-                // Solo insertamos si el equipo no existe por nombre
-                if (!equipmentRepository.existsByName(name)) {
-                    Equipment eq = Equipment.builder()
-                            .name(name)
-                            .latitude(-17.459974)
-                            .longitude(-70.801105)
-                            .color(getColorByCategory(name))
-                            .status(com.suitech.qhbackend.model.EquipmentStatus.OPERATIVO)
-                            .comment("Equipo inicializado por el sistema")
-                            .lastUpdatedBy("System")
-                            .build();
-                    equipmentRepository.save(eq);
-                    createdCount++;
-                }
+        for (String name : equipmentNames) {
+            if (!equipmentRepository.existsByName(name)) {
+                equipmentRepository.save(Equipment.builder()
+                        .name(name)
+                        .latitude(-17.459974)
+                        .longitude(-70.801105)
+                        .color(getColorByCategory(name))
+                        .status(com.suitech.qhbackend.model.EquipmentStatus.OPERATIVO)
+                        .comment("Equipo inicializado por el sistema")
+                        .lastUpdatedBy("System")
+                        .build());
             }
-            if (createdCount > 0) {
-                System.out.println("Se han registrado " + createdCount + " nuevos equipos.");
-            } else {
-                System.out.println("No se requirieron nuevos equipos, la flota está al día.");
-            }
+        }
     }
 
     private String getColorByCategory(String name) {
-        if (name.startsWith("BATERIA") || name.startsWith("NIDO")) return "#00cec9"; // Cian para Hidrociclones
-        if (name.startsWith("D8")) return "#ff4757"; // Rojo
-        if (name.startsWith("D9")) return "#2ed573"; // Verde
-        if (name.startsWith("D10")) return "#1e90ff"; // Azul
-        if (name.contains("Exc.")) return "#ffa502"; // Naranja
-        if (name.contains("Cargador")) return "#aa3bff"; // Morado
-        if (name.contains("Rodillo")) return "#f1f2f6"; // Gris Plata Claro
-        if (name.contains("Volquete")) return "#1e272e"; // Negro Profundo
-        if (name.contains("Retroexcavadora")) return "#ff6b81"; // Rosa
-        if (name.contains("Motoniveladora")) return "#00d2ff"; // Cian
-        return "#3388ff"; // Azul estándar
-    }
-
-    private String getRandomColor() {
-        String[] colors = {"#ff4757", "#2ed573", "#1e90ff", "#ffa502", "#aa3bff", "#747d8c", "#2f3542"};
-        return colors[(int) (Math.random() * colors.length)];
+        if (name.startsWith("BATERIA") || name.startsWith("NIDO")) return "#00cec9";
+        if (name.startsWith("D8")) return "#ff4757";
+        if (name.startsWith("D9")) return "#2ed573";
+        if (name.startsWith("D10")) return "#1e90ff";
+        if (name.contains("Exc.")) return "#ffa502";
+        if (name.contains("Cargador")) return "#aa3bff";
+        if (name.contains("Rodillo")) return "#f1f2f6";
+        if (name.contains("Volquete")) return "#1e272e";
+        if (name.contains("Retroexcavadora")) return "#ff6b81";
+        if (name.contains("Motoniveladora")) return "#00d2ff";
+        return "#3388ff";
     }
 }
