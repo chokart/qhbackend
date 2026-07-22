@@ -38,9 +38,10 @@ public class ShiftController {
         int daysInMonth = firstDay.lengthOfMonth();
         LocalDate lastDay = LocalDate.of(year, month, daysInMonth);
 
-        // Cargar operadores
+        // Cargar operadores ordenados por Guardia (groupId) y luego por Nombre
         List<Operator> operators = operatorRepository.findAll().stream()
-                .sorted(Comparator.comparing(Operator::getName))
+                .sorted(Comparator.comparing((Operator op) -> op.getGroup() != null ? op.getGroup().getId() : Integer.MAX_VALUE)
+                        .thenComparing(Operator::getName))
                 .collect(Collectors.toList());
 
         if (groupId != null) {
