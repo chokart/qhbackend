@@ -2,11 +2,15 @@ package com.suitech.qhbackend.controller;
 
 import com.suitech.qhbackend.model.Cancha;
 import com.suitech.qhbackend.repository.CanchaRepository;
+import com.suitech.qhbackend.service.GeotecniaReportService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Comparator;
 import java.util.stream.Collectors;
@@ -17,6 +21,7 @@ import java.util.stream.Collectors;
 public class CanchaController {
 
     private final CanchaRepository repository;
+    private final GeotecniaReportService reportService;
 
     @GetMapping
     public List<Cancha> getAllCanchas() {
@@ -41,5 +46,19 @@ public class CanchaController {
         
         cancha.setLastUpdatedBy(auth.getName());
         return ResponseEntity.ok(repository.save(cancha));
+    }
+
+    @PostMapping(value = "/import-report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> importGeotecniaReport(
+            @RequestParam("file") MultipartFile file,
+            Authentication auth
+    ) {
+        try {
+            String username = auth != null ? auth.getName() : "ADMIN";
+            GeotecniaReportService.ImportReportResult result = reportService.processPdfReport(file, username);
+            return ResponseEntity.ok(result);
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().body("Error procesando el reporte PDF: " + e.getMessage());
+        }
     }
 }
