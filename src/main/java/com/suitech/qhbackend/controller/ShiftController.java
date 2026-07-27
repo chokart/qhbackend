@@ -78,6 +78,7 @@ public class ShiftController {
 
         for (Operator op : operators) {
             Map<Integer, String> shifts = new HashMap<>();
+            Map<Integer, String> baseShifts = new HashMap<>();
             Map<Integer, Boolean> isOverrideMap = new HashMap<>();
             Map<Integer, String> commentMap = new HashMap<>();
 
@@ -89,13 +90,8 @@ public class ShiftController {
                 LocalDate currentDate = LocalDate.of(year, month, day);
                 String ovKey = op.getId() + "_" + day;
 
-                if (overrideMap.containsKey(ovKey)) {
-                    shifts.put(day, overrideMap.get(ovKey));
-                    isOverrideMap.put(day, true);
-                    if (overrideComments.containsKey(ovKey)) {
-                        commentMap.put(day, overrideComments.get(ovKey));
-                    }
-                } else if (group != null && groupStart != null && pattern != null && !pattern.isEmpty()) {
+                String baseShift = "L";
+                if (group != null && groupStart != null && pattern != null && !pattern.isEmpty()) {
                     long daysDiff;
                     if (!currentDate.isBefore(groupStart)) {
                         daysDiff = ChronoUnit.DAYS.between(groupStart, currentDate);
@@ -105,10 +101,18 @@ public class ShiftController {
                         daysDiff = (pattern.size() - mod) % pattern.size();
                     }
                     int patternIdx = (int) (daysDiff % pattern.size());
-                    shifts.put(day, pattern.get(patternIdx));
-                    isOverrideMap.put(day, false);
+                    baseShift = pattern.get(patternIdx);
+                }
+                baseShifts.put(day, baseShift);
+
+                if (overrideMap.containsKey(ovKey)) {
+                    shifts.put(day, overrideMap.get(ovKey));
+                    isOverrideMap.put(day, true);
+                    if (overrideComments.containsKey(ovKey)) {
+                        commentMap.put(day, overrideComments.get(ovKey));
+                    }
                 } else {
-                    shifts.put(day, "L");
+                    shifts.put(day, baseShift);
                     isOverrideMap.put(day, false);
                 }
             }
@@ -121,6 +125,7 @@ public class ShiftController {
             data.setGroupName(group != null ? group.getName() : "Sin Guardia");
             data.setGroupColor(group != null ? group.getColor() : "#94a3b8");
             data.setShifts(shifts);
+            data.setBaseShifts(baseShifts);
             data.setIsOverride(isOverrideMap);
             data.setComments(commentMap);
             resultOperators.add(data);
@@ -148,16 +153,13 @@ public class ShiftController {
             ShiftOverride override;
             if (existingOpt.isPresent()) {
                 override = existingOpt.get();
-                override.setShiftType(request.getShiftType());
-                override.setComment(request.getComment());
             } else {
-                override = ShiftOverride.builder()
-                        .operator(operator)
-                        .date(curr)
-                        .shiftType(request.getShiftType())
-                        .comment(request.getComment())
-                        .build();
+                override = new ShiftOverride();
+                override.setOperator(operator);
+                override.setDate(curr);
             }
+            override.setShiftType(request.getShiftType());
+            override.setComment(request.getComment());
             shiftOverrideRepository.save(override);
             curr = curr.plusDays(1);
         }
@@ -192,6 +194,7 @@ public class ShiftController {
         private String groupName;
         private String groupColor;
         private Map<Integer, String> shifts;
+        private Map<Integer, String> baseShifts;
         private Map<Integer, Boolean> isOverride;
         private Map<Integer, String> comments;
     }
