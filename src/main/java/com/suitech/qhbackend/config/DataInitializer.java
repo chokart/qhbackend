@@ -207,11 +207,15 @@ public class DataInitializer implements CommandLineRunner {
                 Operator op = existing.get();
                 op.setCode(code);
                 op.setGroup(assignedGroup);
+                if (op.getRole() == null || op.getRole().isEmpty()) {
+                    op.setRole("OPERADOR");
+                }
                 operatorRepository.save(op);
             } else {
                 operatorRepository.save(Operator.builder()
                         .code(code)
                         .name(name)
+                        .role("OPERADOR")
                         .group(assignedGroup)
                         .build());
             }

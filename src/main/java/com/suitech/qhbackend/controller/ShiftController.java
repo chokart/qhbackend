@@ -121,6 +121,7 @@ public class ShiftController {
             data.setOperatorId(op.getId());
             data.setCode(op.getCode());
             data.setName(op.getName());
+            data.setRole(op.getRole() != null ? op.getRole() : "OPERADOR");
             data.setGroupId(group != null ? group.getId() : null);
             data.setGroupName(group != null ? group.getName() : "Sin Guardia");
             data.setGroupColor(group != null ? group.getColor() : "#94a3b8");
@@ -190,6 +191,7 @@ public class ShiftController {
         private Integer operatorId;
         private String code;
         private String name;
+        private String role;
         private Integer groupId;
         private String groupName;
         private String groupColor;

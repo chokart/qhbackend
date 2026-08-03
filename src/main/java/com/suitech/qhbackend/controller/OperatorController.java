@@ -45,8 +45,23 @@ public class OperatorController {
         return ResponseEntity.ok(updatedOperator);
     }
 
+    @PutMapping("/{id}/role")
+    public ResponseEntity<Operator> updateOperatorRole(@PathVariable Integer id, @RequestBody ChangeRoleRequest request) {
+        Operator operator = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Operador no encontrado con ID: " + id));
+
+        operator.setRole(request.getRole());
+        Operator updatedOperator = repository.save(operator);
+        return ResponseEntity.ok(updatedOperator);
+    }
+
     @Data
     public static class ChangeGroupRequest {
         private Integer groupId;
+    }
+
+    @Data
+    public static class ChangeRoleRequest {
+        private String role;
     }
 }
