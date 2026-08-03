@@ -57,6 +57,15 @@ public class EquipmentController {
         return ResponseEntity.ok(repository.save(equipment));
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteEquipment(@PathVariable Integer id) {
+        if (!repository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        repository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

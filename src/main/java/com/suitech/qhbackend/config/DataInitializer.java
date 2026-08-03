@@ -259,8 +259,8 @@ public class DataInitializer implements CommandLineRunner {
         List<String> equipmentNames = Arrays.asList(
                 "D8T-1", "D8T-2", "D8T-3", "D8T-4", "D8T-5", "D8T-6",
                 "D8-1", "D8-2", "D9-1", "D9-2", "D9-3", "D9-4", "D9-5",
-                "D9T-1", "D9T-2", "D9T-3", "D10T-2", "D10T-3", "D10T-5", "D10T-4",
-                "Exc. 324 DL1", "Exc. 324 DL2", "Exc. Kom PC-220", "Exc. 326 DL1", "Exc. 326 DL2", "Exc. 336-1", "Exc. 336-2",
+                "D9T-1", "D9T-2", "D9T-3", "D10T-2",
+                "Exc. 324 DL1", "Exc. 324 DL2", "Exc. Kom PC-220", "Exc. 326 DL1", "Exc. 326 DL2", "Exc. 336-2",
                 "Cargador 988 F3", "Cargador 994K CAT", "Motoniveladora 16H", "Retroexcavadora 45",
                 "Rodillo #6", "Rodillo #7", "Rodillo #8", "Rodillo #9", "Rodillo #10", "Rodillo #11", "Rodillo #12",
                 "Volquete #80", "Volquete #82", "Volquete #84",
