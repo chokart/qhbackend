@@ -57,30 +57,31 @@ public class GeotecniaReportService {
             String fullText = stripper.getText(document);
             String[] lines = fullText.split("\\r?\\n");
 
-            Pattern canchaTokenPattern = Pattern.compile("\\bC[-_ ]?(\\d{1,2})\\b", Pattern.CASE_INSENSITIVE);
-            Pattern elevationPattern = Pattern.compile("\\b(1[0-2]\\d{2}\\.\\d{1,2}|\\d{4}\\.\\d{1,2})\\b");
+            Pattern canchaTokenPattern = Pattern.compile("^C[-_ ]?(\\d{1,2})$", Pattern.CASE_INSENSITIVE);
+            Pattern elevationPattern = Pattern.compile("\\b(1[0-2]\\d{2}\\.\\d{2})\\b");
 
             Map<Integer, Double> principalHeights = new HashMap<>();
+            int[] searchOffsets = {0, 1, -1, 2, -2};
 
             for (int i = 0; i < lines.length; i++) {
                 String line = lines[i].trim();
                 Matcher canchaMatcher = canchaTokenPattern.matcher(line);
 
-                while (canchaMatcher.find()) {
+                if (canchaMatcher.find()) {
                     int canchaNum = Integer.parseInt(canchaMatcher.group(1));
                     if (canchaNum <= 0 || canchaNum > 30) continue;
 
                     Double foundHeight = null;
-                    int windowStart = Math.max(0, i - 4);
-                    int windowEnd = Math.min(lines.length - 1, i + 4);
-
-                    for (int j = windowStart; j <= windowEnd; j++) {
-                        Matcher elevMatcher = elevationPattern.matcher(lines[j].trim());
-                        if (elevMatcher.find()) {
-                            double val = Double.parseDouble(elevMatcher.group(1));
-                            if (val >= 1000.0 && val <= 1300.0) {
-                                foundHeight = val;
-                                break;
+                    for (int offset : searchOffsets) {
+                        int idx = i + offset;
+                        if (idx >= 0 && idx < lines.length) {
+                            Matcher elevMatcher = elevationPattern.matcher(lines[idx].trim());
+                            if (elevMatcher.find()) {
+                                double val = Double.parseDouble(elevMatcher.group(1));
+                                if (val >= 1000.0 && val <= 1300.0 && val != 1220.0 && val != 1215.0) {
+                                    foundHeight = val;
+                                    break;
+                                }
                             }
                         }
                     }
