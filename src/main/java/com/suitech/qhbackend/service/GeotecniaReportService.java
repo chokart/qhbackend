@@ -43,11 +43,85 @@ public class GeotecniaReportService {
         DIQUE_LATERAL
     }
 
-    public ImportReportResult processPdfReport(MultipartFile file, String updatedBy) throws IOException {
-        return processPdfBytes(file.getBytes(), updatedBy);
+    // 1. Procesar Perfil PDF (Actualiza Niveles / Elevaciones en msnm)
+    public ImportReportResult processPerfilPdf(MultipartFile file, String updatedBy) throws IOException {
+        return processPerfilBytes(file.getBytes(), updatedBy);
     }
 
-    public ImportReportResult processPdfBytes(byte[] pdfBytes, String updatedBy) throws IOException {
+    public ImportReportResult processPerfilBytes(byte[] pdfBytes, String updatedBy) throws IOException {
+        List<String> logs = new ArrayList<>();
+        int principalCount = 0;
+
+        try (PDDocument document = Loader.loadPDF(pdfBytes)) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            String fullText = stripper.getText(document);
+            String[] lines = fullText.split("\\r?\\n");
+
+            Pattern canchaTokenPattern = Pattern.compile("\\bC[-_ ]?(\\d{1,2})\\b", Pattern.CASE_INSENSITIVE);
+            Pattern elevationPattern = Pattern.compile("\\b(1[0-2]\\d{2}\\.\\d{1,2}|\\d{4}\\.\\d{1,2})\\b");
+
+            Map<Integer, Double> principalHeights = new HashMap<>();
+
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i].trim();
+                Matcher canchaMatcher = canchaTokenPattern.matcher(line);
+
+                while (canchaMatcher.find()) {
+                    int canchaNum = Integer.parseInt(canchaMatcher.group(1));
+                    if (canchaNum <= 0 || canchaNum > 30) continue;
+
+                    Double foundHeight = null;
+                    int windowStart = Math.max(0, i - 4);
+                    int windowEnd = Math.min(lines.length - 1, i + 4);
+
+                    for (int j = windowStart; j <= windowEnd; j++) {
+                        Matcher elevMatcher = elevationPattern.matcher(lines[j].trim());
+                        if (elevMatcher.find()) {
+                            double val = Double.parseDouble(elevMatcher.group(1));
+                            if (val >= 1000.0 && val <= 1300.0) {
+                                foundHeight = val;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (foundHeight != null && !principalHeights.containsKey(canchaNum)) {
+                        principalHeights.put(canchaNum, foundHeight);
+                    }
+                }
+            }
+
+            for (Map.Entry<Integer, Double> entry : new TreeMap<>(principalHeights).entrySet()) {
+                int num = entry.getKey();
+                double height = entry.getValue();
+
+                Cancha cancha = canchaRepository.findByNumber(num)
+                        .orElseGet(() -> Cancha.builder().number(num).build());
+
+                cancha.setCurrentHeight(height);
+                cancha.setLastUpdatedBy(updatedBy != null ? updatedBy : "PERFIL_GEOTECNIA_PDF");
+                canchaRepository.save(cancha);
+                principalCount++;
+
+                logs.add(String.format("Dique Principal C-%02d -> Elevación actual: %.2f msnm", num, height));
+            }
+        }
+
+        if (principalCount == 0) {
+            logs.add("⚠️ No se identificaron niveles de elevación legibles en el perfil PDF.");
+        } else {
+            logs.add(0, String.format("✅ Se actualizaron las alturas de %d canchas en el Dique Principal.", principalCount));
+        }
+
+        return new ImportReportResult(principalCount, 0, logs);
+    }
+
+    // 2. Procesar Reporte Canchas PDF (Actualiza Estados y Comentarios)
+    public ImportReportResult processCanchasPdf(MultipartFile file, String updatedBy) throws IOException {
+        return processCanchasBytes(file.getBytes(), updatedBy);
+    }
+
+    public ImportReportResult processCanchasBytes(byte[] pdfBytes, String updatedBy) throws IOException {
         List<String> logs = new ArrayList<>();
         int principalCount = 0;
         int lateralCount = 0;
@@ -55,161 +129,109 @@ public class GeotecniaReportService {
         try (PDDocument document = Loader.loadPDF(pdfBytes)) {
             PDFTextStripper stripper = new PDFTextStripper();
             String fullText = stripper.getText(document);
-
             String[] lines = fullText.split("\\r?\\n");
 
-            // Mapa para registrar actualizaciones por número de cancha
-            Map<Integer, Double> principalHeights = new HashMap<>();
-            Map<Integer, CanchaStatus> principalStatuses = new HashMap<>();
-
-            Map<Integer, Double> lateralHeights = new HashMap<>();
-            Map<Integer, CanchaStatus> lateralStatuses = new HashMap<>();
-            Map<Integer, Integer> lateralCapas = new HashMap<>();
-
             CurrentSection currentSection = CurrentSection.DIQUE_PRINCIPAL;
-
-            Pattern canchaTokenPattern = Pattern.compile("\\bC[-_ ]?(\\d{1,2})\\b", Pattern.CASE_INSENSITIVE);
-            Pattern elevationPattern = Pattern.compile("\\b(1[0-2]\\d{2}\\.\\d{1,2}|\\d{4}\\.\\d{1,2})\\b");
+            Pattern rowPattern = Pattern.compile("^C[-_ ]?(\\d{1,2})\\s+(.+)$", Pattern.CASE_INSENSITIVE);
             Pattern capaPattern = Pattern.compile("Capa\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
 
-            for (int i = 0; i < lines.length; i++) {
-                String line = lines[i].trim();
+            for (String rawLine : lines) {
+                String line = rawLine.trim();
                 if (line.isEmpty()) continue;
 
                 String lower = line.toLowerCase();
-                if (lower.contains("dique lateral") || lower.contains("nivel 1215")) {
+                if (lower.contains("dique lateral")) {
                     currentSection = CurrentSection.DIQUE_LATERAL;
-                } else if (lower.contains("dique principal") || lower.contains("nivel 1220")) {
+                    continue;
+                } else if (lower.contains("dique principal")) {
                     currentSection = CurrentSection.DIQUE_PRINCIPAL;
+                    continue;
                 }
 
-                Matcher canchaMatcher = canchaTokenPattern.matcher(line);
-                while (canchaMatcher.find()) {
-                    int canchaNum = Integer.parseInt(canchaMatcher.group(1));
+                Matcher matcher = rowPattern.matcher(line);
+                if (matcher.find()) {
+                    int canchaNum = Integer.parseInt(matcher.group(1));
+                    String rest = matcher.group(2).trim();
+
                     if (canchaNum <= 0 || canchaNum > 30) continue;
 
-                    // Buscar elevación/altura y estado en las líneas cercanas (i-4 a i+4)
-                    Double foundHeight = null;
-                    CanchaStatus foundStatus = null;
-                    Integer foundCapa = null;
-
-                    int windowStart = Math.max(0, i - 4);
-                    int windowEnd = Math.min(lines.length - 1, i + 4);
-
-                    for (int j = windowStart; j <= windowEnd; j++) {
-                        String contextLine = lines[j].trim();
-
-                        // Buscar elevaciones (ej. 1123.32, 1156.27, 1220.00)
-                        if (foundHeight == null) {
-                            Matcher elevMatcher = elevationPattern.matcher(contextLine);
-                            if (elevMatcher.find()) {
-                                double val = Double.parseDouble(elevMatcher.group(1));
-                                // Filtrar valores de progresivas o coronamiento si no parecen de la cancha
-                                if (val >= 1000.0 && val <= 1300.0) {
-                                    foundHeight = val;
-                                }
-                            }
-                        }
-
-                        // Buscar Estado
-                        if (foundStatus == null) {
-                            foundStatus = parseStatusFromToken(contextLine);
-                        }
-
-                        // Buscar N° de Capa
-                        if (foundCapa == null) {
-                            Matcher capaMatcher = capaPattern.matcher(contextLine);
-                            if (capaMatcher.find()) {
-                                foundCapa = Integer.parseInt(capaMatcher.group(1));
-                            }
-                        }
-                    }
+                    CanchaStatus status = parseStatusFromToken(rest);
 
                     if (currentSection == CurrentSection.DIQUE_PRINCIPAL) {
-                        if (foundHeight != null && !principalHeights.containsKey(canchaNum)) {
-                            principalHeights.put(canchaNum, foundHeight);
+                        String comment = extractCommentFromRest(rest, status);
+                        Cancha cancha = canchaRepository.findByNumber(canchaNum)
+                                .orElseGet(() -> Cancha.builder().number(canchaNum).build());
+
+                        if (status != null) cancha.setStatus(status);
+                        if (comment != null && !comment.isEmpty()) cancha.setComment(comment);
+
+                        cancha.setLastUpdatedBy(updatedBy != null ? updatedBy : "CANCHAS_REPORT_PDF");
+                        canchaRepository.save(cancha);
+                        principalCount++;
+
+                        logs.add(String.format("Dique Principal C-%02d -> Estado: %s %s",
+                                canchaNum,
+                                status != null ? status : "CONSERVADO",
+                                (comment != null && !comment.isEmpty()) ? "| Comentario: " + comment : ""
+                        ).trim());
+
+                    } else { // DIQUE LATERAL
+                        CanchaCapa canchaCapa = canchaCapaRepository.findByNumber(canchaNum)
+                                .orElseGet(() -> CanchaCapa.builder().number(canchaNum).build());
+
+                        Matcher capaMatcher = capaPattern.matcher(rest);
+                        if (capaMatcher.find()) {
+                            canchaCapa.setCurrentCapa(Integer.parseInt(capaMatcher.group(1)));
                         }
-                        if (foundStatus != null && !principalStatuses.containsKey(canchaNum)) {
-                            principalStatuses.put(canchaNum, foundStatus);
-                        }
-                    } else {
-                        if (foundHeight != null && !lateralHeights.containsKey(canchaNum)) {
-                            lateralHeights.put(canchaNum, foundHeight);
-                        }
-                        if (foundStatus != null && !lateralStatuses.containsKey(canchaNum)) {
-                            lateralStatuses.put(canchaNum, foundStatus);
-                        }
-                        if (foundCapa != null && !lateralCapas.containsKey(canchaNum)) {
-                            lateralCapas.put(canchaNum, foundCapa);
-                        }
+
+                        if (status != null) canchaCapa.setStatus(status);
+                        canchaCapa.setLastUpdatedBy(updatedBy != null ? updatedBy : "CANCHAS_REPORT_PDF");
+                        canchaCapaRepository.save(canchaCapa);
+                        lateralCount++;
+
+                        logs.add(String.format("Dique Lateral C-%02d -> Estado: %s %s",
+                                canchaNum,
+                                status != null ? status : "CONSERVADO",
+                                canchaCapa.getCurrentCapa() != null ? "| Capa: " + canchaCapa.getCurrentCapa() : ""
+                        ).trim());
                     }
                 }
-            }
-
-            // Aplicar actualizaciones a Dique Principal
-            Set<Integer> allPrincipalCanchas = new TreeSet<>(principalHeights.keySet());
-            allPrincipalCanchas.addAll(principalStatuses.keySet());
-
-            for (Integer num : allPrincipalCanchas) {
-                Cancha cancha = canchaRepository.findByNumber(num)
-                        .orElseGet(() -> Cancha.builder().number(num).build());
-
-                Double h = principalHeights.get(num);
-                CanchaStatus st = principalStatuses.get(num);
-
-                if (h != null) cancha.setCurrentHeight(h);
-                if (st != null) cancha.setStatus(st);
-
-                cancha.setLastUpdatedBy(updatedBy != null ? updatedBy : "SISTEMA_GEOTECNIA_PDF");
-                canchaRepository.save(cancha);
-                principalCount++;
-
-                String logMsg = String.format("Dique Principal C-%02d -> %s %s",
-                        num,
-                        h != null ? "Altura: " + h + " m" : "",
-                        st != null ? "| Estado: " + st : ""
-                ).trim();
-                logs.add(logMsg);
-            }
-
-            // Aplicar actualizaciones a Dique Lateral
-            Set<Integer> allLateralCanchas = new TreeSet<>(lateralHeights.keySet());
-            allLateralCanchas.addAll(lateralStatuses.keySet());
-
-            for (Integer num : allLateralCanchas) {
-                CanchaCapa canchaCapa = canchaCapaRepository.findByNumber(num)
-                        .orElseGet(() -> CanchaCapa.builder().number(num).build());
-
-                Double h = lateralHeights.get(num);
-                CanchaStatus st = lateralStatuses.get(num);
-                Integer capa = lateralCapas.get(num);
-
-                if (st != null) canchaCapa.setStatus(st);
-                if (capa != null) canchaCapa.setCurrentCapa(capa);
-
-                canchaCapa.setLastUpdatedBy(updatedBy != null ? updatedBy : "SISTEMA_GEOTECNIA_PDF");
-                canchaCapaRepository.save(canchaCapa);
-                lateralCount++;
-
-                String logMsg = String.format("Dique Lateral C-%02d -> %s %s",
-                        num,
-                        capa != null ? "Capa: " + capa : "",
-                        st != null ? "| Estado: " + st : ""
-                ).trim();
-                logs.add(logMsg);
             }
         }
 
         if (principalCount == 0 && lateralCount == 0) {
-            logs.add("⚠️ No se identificaron niveles o estados de canchas legibles en el PDF subido.");
+            logs.add("⚠️ No se identificaron filas de canchas en el reporte PDF.");
         } else {
-            logs.add(0, String.format("✅ Se actualizaron exitosamente %d canchas en Dique Principal y %d en Dique Lateral.", principalCount, lateralCount));
+            logs.add(0, String.format("✅ Se actualizaron estados y comentarios de %d canchas en Dique Principal y %d en Dique Lateral.", principalCount, lateralCount));
         }
 
         return new ImportReportResult(principalCount, lateralCount, logs);
     }
 
-    private CanchaStatus parseStatusFromToken(String text) {
+    private String extractCommentFromRest(String rest, CanchaStatus status) {
+        if (rest == null || rest.trim().isEmpty()) return "";
+        String text = rest.trim();
+
+        // Quitar la palabra clave del estado del comentario
+        String[] statusKeywords = {
+                "Por ciclonear.", "Por ciclonear", "Cicloneando.", "Cicloneando",
+                "Por compactar.", "Por compactar", "Compactado.", "Compactado", "Compactada.", "Compactada", "Finalizado.", "Finalizado",
+                "Por preparar.", "Por preparar", "Drenando.", "Drenando",
+                "STAND BY.", "STAND BY", "STANDBY.", "STANDBY", "OBSERVADA.", "OBSERVADA"
+        };
+
+        for (String kw : statusKeywords) {
+            if (text.startsWith(kw)) {
+                text = text.substring(kw.length()).trim();
+                break;
+            }
+        }
+
+        return text;
+    }
+
+    public CanchaStatus parseStatusFromToken(String text) {
+        if (text == null) return null;
         String trimmed = text.trim();
         String lower = trimmed.toLowerCase();
 
@@ -228,7 +250,7 @@ public class GeotecniaReportService {
         if (lower.contains("por ciclonear")) return CanchaStatus.POR_CICLONEAR;
         if (lower.contains("cicloneando")) return CanchaStatus.CICLONEANDO;
         if (lower.contains("por compactar")) return CanchaStatus.POR_COMPACTAR;
-        if (lower.contains("compactado") || lower.contains("compactada")) return CanchaStatus.COMPACTADO;
+        if (lower.contains("compactado") || lower.contains("compactada") || lower.contains("finalizado")) return CanchaStatus.COMPACTADO;
         if (lower.contains("por preparar")) return CanchaStatus.POR_PREPARAR_BERMA;
         if (lower.contains("drenando")) return CanchaStatus.DRENANDO;
         if (lower.contains("stand by") || lower.contains("standby")) return CanchaStatus.STAND_BY;

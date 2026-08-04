@@ -37,13 +37,24 @@ public class GeotecniaReportServiceTest {
         File pdfFile = new File("D:\\qhrelavera\\perfil.pdf");
         byte[] pdfBytes = Files.readAllBytes(pdfFile.toPath());
 
-        GeotecniaReportService.ImportReportResult result = service.processPdfBytes(pdfBytes, "TEST_USER");
+        GeotecniaReportService.ImportReportResult resultPerfil = service.processPerfilBytes(pdfBytes, "TEST_USER");
 
-        System.out.println("=== TEST IMPORT RESULT ===");
-        System.out.println("Principal Updated: " + result.getPrincipalUpdated());
-        System.out.println("Lateral Updated: " + result.getLateralUpdated());
-        for (String msg : result.getLogMessages()) {
+        System.out.println("=== TEST PERFIL RESULT ===");
+        System.out.println("Principal Updated: " + resultPerfil.getPrincipalUpdated());
+        for (String msg : resultPerfil.getLogMessages()) {
             System.out.println(msg);
+        }
+
+        File canchasFile = new File("D:\\qhrelavera\\canchas.pdf");
+        if (canchasFile.exists()) {
+            byte[] canchasBytes = Files.readAllBytes(canchasFile.toPath());
+            GeotecniaReportService.ImportReportResult resultCanchas = service.processCanchasBytes(canchasBytes, "TEST_USER");
+            System.out.println("=== TEST CANCHAS RESULT ===");
+            System.out.println("Principal Updated: " + resultCanchas.getPrincipalUpdated());
+            System.out.println("Lateral Updated: " + resultCanchas.getLateralUpdated());
+            for (String msg : resultCanchas.getLogMessages()) {
+                System.out.println(msg);
+            }
         }
     }
 }
