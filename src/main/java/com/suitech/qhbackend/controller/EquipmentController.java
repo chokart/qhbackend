@@ -26,7 +26,30 @@ public class EquipmentController {
 
     @PostMapping
     public ResponseEntity<Equipment> registerEquipment(@RequestBody Equipment equipment, Authentication auth) {
-        equipment.setLastUpdatedBy(auth.getName());
+        String username = auth != null ? auth.getName() : "ADMIN";
+        equipment.setLastUpdatedBy(username);
+        return ResponseEntity.ok(repository.save(equipment));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Equipment> updateEquipment(
+            @PathVariable Integer id,
+            @RequestBody Equipment request,
+            Authentication auth
+    ) {
+        Equipment equipment = repository.findById(id).orElseThrow();
+        if (request.getName() != null) equipment.setName(request.getName());
+        if (request.getShortCode() != null) equipment.setShortCode(request.getShortCode());
+        if (request.getDescription() != null) equipment.setDescription(request.getDescription());
+        if (request.getPlate() != null) equipment.setPlate(request.getPlate());
+        if (request.getSpccCode() != null) equipment.setSpccCode(request.getSpccCode());
+        if (request.getEquipmentType() != null) equipment.setEquipmentType(request.getEquipmentType());
+        if (request.getStatus() != null) equipment.setStatus(request.getStatus());
+        if (request.getComment() != null) equipment.setComment(request.getComment());
+        if (request.getColor() != null) equipment.setColor(request.getColor());
+
+        String username = auth != null ? auth.getName() : "ADMIN";
+        equipment.setLastUpdatedBy(username);
         return ResponseEntity.ok(repository.save(equipment));
     }
 

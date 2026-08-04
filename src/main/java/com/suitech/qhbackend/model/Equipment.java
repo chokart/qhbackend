@@ -21,7 +21,13 @@ public class Equipment {
     
     @Column(nullable = false)
     private String name;
-    
+
+    private String shortCode;   // Ej: "CIS-01", "D8-01"
+    private String description; // Descripción detallada
+    private String plate;       // Placa
+    private String spccCode;    // Código SPCC
+    private String equipmentType; // TRACTOR, EXCAVADORA, CISTERNA, TRACTO, CAMION_GRUA, CAMABAJA, etc.
+
     private Double latitude;
     private Double longitude;
     
