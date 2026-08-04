@@ -78,7 +78,7 @@ public class GeotecniaReportService {
                             Matcher elevMatcher = elevationPattern.matcher(lines[idx].trim());
                             if (elevMatcher.find()) {
                                 double val = Double.parseDouble(elevMatcher.group(1));
-                                if (val >= 1000.0 && val <= 1300.0 && val != 1220.0 && val != 1215.0) {
+                                if (val >= 1110.0 && val <= 1300.0 && val != 1220.0 && val != 1215.0) {
                                     foundHeight = val;
                                     break;
                                 }
