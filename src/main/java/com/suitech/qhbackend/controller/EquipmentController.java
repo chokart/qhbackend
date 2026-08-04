@@ -21,13 +21,34 @@ public class EquipmentController {
 
     @GetMapping
     public List<Equipment> getAllEquipment() {
-        return repository.findAll();
+        List<Equipment> list = repository.findAll();
+        boolean updatedAny = false;
+        for (Equipment eq : list) {
+            if (eq.getShortCode() == null || eq.getShortCode().trim().isEmpty()) {
+                eq.setShortCode(generateShortCode(eq.getName()));
+                updatedAny = true;
+            }
+            if (eq.getEquipmentType() == null || eq.getEquipmentType().trim().isEmpty()) {
+                eq.setEquipmentType(inferEquipmentType(eq.getName()));
+                updatedAny = true;
+            }
+        }
+        if (updatedAny) {
+            repository.saveAll(list);
+        }
+        return list;
     }
 
     @PostMapping
     public ResponseEntity<Equipment> registerEquipment(@RequestBody Equipment equipment, Authentication auth) {
         String username = auth != null ? auth.getName() : "ADMIN";
         equipment.setLastUpdatedBy(username);
+        if (equipment.getShortCode() == null || equipment.getShortCode().trim().isEmpty()) {
+            equipment.setShortCode(generateShortCode(equipment.getName()));
+        }
+        if (equipment.getEquipmentType() == null || equipment.getEquipmentType().trim().isEmpty()) {
+            equipment.setEquipmentType(inferEquipmentType(equipment.getName()));
+        }
         return ResponseEntity.ok(repository.save(equipment));
     }
 
@@ -87,6 +108,39 @@ public class EquipmentController {
         }
         repository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    public static String generateShortCode(String name) {
+        if (name == null || name.trim().isEmpty()) return "EQ";
+        String n = name.trim();
+        if (n.startsWith("BATERIA")) return "B" + n.substring(7).trim();
+        if (n.startsWith("NIDO")) return "N" + n.substring(4).trim();
+        if (n.startsWith("Rodillo #")) return "R" + n.replace("Rodillo #", "").trim();
+        if (n.startsWith("Volquete #")) return "V" + n.replace("Volquete #", "").trim();
+        if (n.toLowerCase().startsWith("cisterna")) return "CIS" + n.replaceAll("(?i)cisterna", "").replace("#", "").trim();
+        if (n.toLowerCase().startsWith("tracto")) return "TR" + n.replaceAll("(?i)tracto", "").replace("#", "").trim();
+        if (n.toLowerCase().startsWith("retroexcavadora")) return "RT" + n.replaceAll("(?i)retroexcavadora", "").trim();
+        if (n.toLowerCase().startsWith("motoniveladora")) return "MN" + n.replaceAll("(?i)motoniveladora", "").trim();
+        if (n.toLowerCase().startsWith("cargador")) return "CF" + n.replaceAll("(?i)cargador", "").trim();
+        if (n.toLowerCase().startsWith("exc.")) return "EXC-" + n.replace("Exc.", "").trim();
+        return n;
+    }
+
+    public static String inferEquipmentType(String name) {
+        if (name == null) return "OTROS";
+        String lower = name.toLowerCase();
+        if (name.startsWith("BATERIA") || name.startsWith("NIDO")) return "HIDROCICLON";
+        if (name.startsWith("D8") || name.startsWith("D9") || name.startsWith("D10") || lower.contains("tractor")) return "TRACTOR";
+        if (name.contains("Exc.") || lower.contains("excavadora")) return "EXCAVADORA";
+        if (lower.contains("cisterna") || lower.contains("agua")) return "CISTERNA";
+        if (lower.contains("tracto")) return "TRACTO";
+        if (lower.contains("grúa") || lower.contains("grua")) return "CAMION_GRUA";
+        if (lower.contains("camabaja")) return "CAMABAJA";
+        if (lower.contains("cargador")) return "CARGADOR";
+        if (lower.contains("volquete")) return "VOLQUETE";
+        if (lower.contains("rodillo")) return "RODILLO";
+        if (lower.contains("motoniveladora")) return "MOTONIVELADORA";
+        return "OTROS";
     }
 
     @Data
