@@ -13,6 +13,9 @@ import java.util.List;
 import java.util.Comparator;
 import java.util.stream.Collectors;
 
+import com.suitech.qhbackend.repository.ShiftOverrideRepository;
+import org.springframework.transaction.annotation.Transactional;
+
 @RestController
 @RequestMapping("/api/v1/operators")
 @RequiredArgsConstructor
@@ -20,12 +23,45 @@ public class OperatorController {
 
     private final OperatorRepository repository;
     private final GroupRepository groupRepository;
+    private final ShiftOverrideRepository shiftOverrideRepository;
 
     @GetMapping
     public List<Operator> getAllOperators() {
         return repository.findAll().stream()
                 .sorted(Comparator.comparing(Operator::getName))
                 .collect(Collectors.toList());
+    }
+
+    @PostMapping
+    public ResponseEntity<Operator> createOperator(@RequestBody CreateOperatorRequest request) {
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new RuntimeException("El nombre del operador es requerido");
+        }
+
+        Operator operator = new Operator();
+        operator.setCode(request.getCode() != null ? request.getCode().trim() : null);
+        operator.setName(request.getName().trim());
+        operator.setRole(request.getRole() != null && !request.getRole().trim().isEmpty() ? request.getRole().trim() : "OPERADOR");
+
+        if (request.getGroupId() != null && request.getGroupId() > 0) {
+            Group group = groupRepository.findById(request.getGroupId())
+                    .orElse(null);
+            operator.setGroup(group);
+        }
+
+        Operator savedOperator = repository.save(operator);
+        return ResponseEntity.ok(savedOperator);
+    }
+
+    @DeleteMapping("/{id}")
+    @Transactional
+    public ResponseEntity<Void> deleteOperator(@PathVariable Integer id) {
+        Operator operator = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Operador no encontrado con ID: " + id));
+
+        shiftOverrideRepository.deleteByOperatorId(id);
+        repository.delete(operator);
+        return ResponseEntity.ok().build();
     }
 
     @PutMapping("/{id}/group")
@@ -53,6 +89,14 @@ public class OperatorController {
         operator.setRole(request.getRole());
         Operator updatedOperator = repository.save(operator);
         return ResponseEntity.ok(updatedOperator);
+    }
+
+    @Data
+    public static class CreateOperatorRequest {
+        private String code;
+        private String name;
+        private String role;
+        private Integer groupId;
     }
 
     @Data

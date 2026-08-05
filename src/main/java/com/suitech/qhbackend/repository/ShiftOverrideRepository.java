@@ -11,4 +11,5 @@ public interface ShiftOverrideRepository extends JpaRepository<ShiftOverride, In
     List<ShiftOverride> findByDateBetween(LocalDate start, LocalDate end);
     List<ShiftOverride> findByOperatorIdAndDateBetween(Integer operatorId, LocalDate start, LocalDate end);
     Optional<ShiftOverride> findByOperatorIdAndDate(Integer operatorId, LocalDate date);
+    void deleteByOperatorId(Integer operatorId);
 }
