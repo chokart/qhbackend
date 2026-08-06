@@ -140,6 +140,132 @@ public class ShiftController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/range")
+    public ResponseEntity<ShiftRangeResponse> getShiftRange(
+            @RequestParam String startDate,
+            @RequestParam String endDate,
+            @RequestParam(required = false) Integer groupId
+    ) {
+        LocalDate start = LocalDate.parse(startDate);
+        LocalDate end = LocalDate.parse(endDate);
+
+        List<Operator> operators = operatorRepository.findAll().stream()
+                .sorted(Comparator.comparing((Operator op) -> op.getGroup() != null ? op.getGroup().getId() : Integer.MAX_VALUE)
+                        .thenComparing(Operator::getName))
+                .collect(Collectors.toList());
+
+        if (groupId != null) {
+            operators = operators.stream()
+                    .filter(op -> op.getGroup() != null && op.getGroup().getId().equals(groupId))
+                    .collect(Collectors.toList());
+        }
+
+        List<ShiftOverride> overrides = shiftOverrideRepository.findByDateBetween(start, end);
+        Map<String, String> overrideMap = new HashMap<>();
+        Map<String, String> overrideComments = new HashMap<>();
+        for (ShiftOverride ov : overrides) {
+            String key = ov.getOperator().getId() + "_" + ov.getDate().toString();
+            overrideMap.put(key, ov.getShiftType());
+            if (ov.getComment() != null) overrideComments.put(key, ov.getComment());
+        }
+
+        Map<Integer, List<String>> groupPatterns = new HashMap<>();
+        List<Group> allGroups = groupRepository.findAll();
+        for (Group g : allGroups) {
+            if (g.getPatternJson() != null && !g.getPatternJson().isEmpty()) {
+                try {
+                    List<String> pattern = objectMapper.readValue(g.getPatternJson(), new TypeReference<List<String>>() {});
+                    groupPatterns.put(g.getId(), pattern);
+                } catch (Exception e) {
+                    groupPatterns.put(g.getId(), Collections.emptyList());
+                }
+            }
+        }
+
+        List<OperatorRangeShiftData> resultOperators = new ArrayList<>();
+
+        for (Operator op : operators) {
+            Map<String, DailyShiftDetail> dailyShifts = new LinkedHashMap<>();
+            Group group = op.getGroup();
+            List<String> pattern = group != null ? groupPatterns.get(group.getId()) : null;
+            LocalDate groupStart = group != null ? group.getStartDate() : null;
+
+            LocalDate curr = start;
+            while (!curr.isAfter(end)) {
+                String dateStr = curr.toString();
+                String ovKey = op.getId() + "_" + dateStr;
+
+                String baseShift = "L";
+                if (group != null && groupStart != null && pattern != null && !pattern.isEmpty()) {
+                    long daysDiff;
+                    if (!curr.isBefore(groupStart)) {
+                        daysDiff = ChronoUnit.DAYS.between(groupStart, curr);
+                    } else {
+                        long diffBefore = ChronoUnit.DAYS.between(curr, groupStart);
+                        long mod = diffBefore % pattern.size();
+                        daysDiff = (pattern.size() - mod) % pattern.size();
+                    }
+                    int patternIdx = (int) (daysDiff % pattern.size());
+                    baseShift = pattern.get(patternIdx);
+                }
+
+                String finalShift;
+                boolean isOverride = false;
+                String comment = null;
+
+                if (overrideMap.containsKey(ovKey)) {
+                    finalShift = overrideMap.get(ovKey);
+                    isOverride = true;
+                    comment = overrideComments.get(ovKey);
+                } else {
+                    finalShift = baseShift;
+                }
+
+                String turnCategory;
+                if ("D".equals(finalShift) || "ST-D".equals(finalShift)) {
+                    turnCategory = "DIA";
+                } else if ("N".equals(finalShift) || "ST-N".equals(finalShift)) {
+                    turnCategory = "NOCHE";
+                } else if ("ST".equals(finalShift)) {
+                    turnCategory = "N".equals(baseShift) ? "NOCHE" : "DIA";
+                } else if ("V".equals(finalShift) || "DM".equals(finalShift)) {
+                    turnCategory = "N".equals(baseShift) ? "NOCHE" : "DIA";
+                } else {
+                    turnCategory = "LIBRE";
+                }
+
+                DailyShiftDetail detail = new DailyShiftDetail();
+                detail.setDate(dateStr);
+                detail.setFinalShift(finalShift);
+                detail.setBaseShift(baseShift);
+                detail.setTurnCategory(turnCategory);
+                detail.setIsOverride(isOverride);
+                detail.setComment(comment);
+
+                dailyShifts.put(dateStr, detail);
+
+                curr = curr.plusDays(1);
+            }
+
+            OperatorRangeShiftData data = new OperatorRangeShiftData();
+            data.setOperatorId(op.getId());
+            data.setCode(op.getCode());
+            data.setName(op.getName());
+            data.setRole(op.getRole() != null ? op.getRole() : "OPERADOR");
+            data.setGroupId(group != null ? group.getId() : null);
+            data.setGroupName(group != null ? group.getName() : "Sin Guardia");
+            data.setGroupColor(group != null ? group.getColor() : "#94a3b8");
+            data.setDailyShifts(dailyShifts);
+            resultOperators.add(data);
+        }
+
+        ShiftRangeResponse response = new ShiftRangeResponse();
+        response.setStartDate(startDate);
+        response.setEndDate(endDate);
+        response.setOperators(resultOperators);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/override")
     public ResponseEntity<Void> createOverride(@RequestBody OverrideRequest request) {
         Operator operator = operatorRepository.findById(request.getOperatorId()).orElseThrow();
@@ -207,6 +333,35 @@ public class ShiftController {
         private String startDate; // "YYYY-MM-DD"
         private String endDate;   // "YYYY-MM-DD" (opcional para rangos de vacaciones)
         private String shiftType; // "D", "N", "L", "V"
+        private String comment;
+    }
+
+    @Data
+    public static class ShiftRangeResponse {
+        private String startDate;
+        private String endDate;
+        private List<OperatorRangeShiftData> operators;
+    }
+
+    @Data
+    public static class OperatorRangeShiftData {
+        private Integer operatorId;
+        private String code;
+        private String name;
+        private String role;
+        private Integer groupId;
+        private String groupName;
+        private String groupColor;
+        private Map<String, DailyShiftDetail> dailyShifts; // "YYYY-MM-DD" -> detail
+    }
+
+    @Data
+    public static class DailyShiftDetail {
+        private String date;
+        private String finalShift;   // "D", "N", "L", "V", "DM", "ST-D", "ST-N"
+        private String baseShift;    // "D", "N", "L"
+        private String turnCategory; // "DIA", "NOCHE", "LIBRE"
+        private Boolean isOverride;
         private String comment;
     }
 }
