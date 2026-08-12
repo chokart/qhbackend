@@ -242,7 +242,7 @@ public class ExcelReportParserService {
                     return cell.getNumericCellValue();
                 }
             } else if (cell.getCellType() == CellType.STRING) {
-                String str = cell.getStringValue().replaceAll("[,\\s%]", "").trim();
+                String str = cell.getStringCellValue().replaceAll("[,\\s%]", "").trim();
                 return Double.parseDouble(str);
             }
         } catch (Exception ignored) {}
@@ -260,7 +260,7 @@ public class ExcelReportParserService {
             if (cell.getCellType() == CellType.NUMERIC) {
                 return (int) cell.getNumericCellValue();
             } else if (cell.getCellType() == CellType.STRING) {
-                return Integer.parseInt(cell.getStringValue().trim());
+                return Integer.parseInt(cell.getStringCellValue().trim());
             }
         } catch (Exception ignored) {}
         return 0;
