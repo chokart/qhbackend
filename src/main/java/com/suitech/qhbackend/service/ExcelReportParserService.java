@@ -80,10 +80,25 @@ public class ExcelReportParserService {
         try {
             // Fecha en G3
             String dateStr = getCellString(sheet, "G3", formatter);
-            LocalDate reportDate = parseLocalDate(sheet, 2, 6, formatter); // Fila index 2 (Fila 3 Excel), Col 6 (G)
-            if (reportDate == null && dateStr != null) {
+            Row row3 = sheet.getRow(2);
+            Cell g3Cell = row3 != null ? row3.getCell(6) : null;
+            
+            LocalDate reportDate = parseCellDate(g3Cell);
+            if (reportDate == null && dateStr != null && !dateStr.isBlank()) {
                 reportDate = tryParseDateString(dateStr);
             }
+
+            // Fallback: Inferir el día a partir del nombre de la hoja (ej. "01" -> 1)
+            if (reportDate == null) {
+                String sheetName = sheet.getSheetName().trim();
+                if (sheetName.matches("^\\d{1,2}$")) {
+                    int day = Integer.parseInt(sheetName);
+                    int year = LocalDate.now().getYear();
+                    int month = LocalDate.now().getMonthValue();
+                    reportDate = LocalDate.of(year, month, day);
+                }
+            }
+
             if (reportDate == null) {
                 return null;
             }
@@ -196,35 +211,76 @@ public class ExcelReportParserService {
         return list;
     }
 
-    private LocalDate parseLocalDate(Sheet sheet, int rowIndex, int colIndex, DataFormatter formatter) {
-        Row row = sheet.getRow(rowIndex);
-        if (row == null) return null;
-        Cell cell = row.getCell(colIndex);
-        return parseCellDate(cell);
-    }
-
     private LocalDate parseCellDate(Cell cell) {
         if (cell == null) return null;
-        if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
-            Date d = cell.getDateCellValue();
-            return d.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-        }
+        try {
+            if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+                Date d = cell.getDateCellValue();
+                return d.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            } else if (cell.getCellType() == CellType.NUMERIC) {
+                double val = cell.getNumericCellValue();
+                if (val > 30000 && val < 60000) {
+                    Date d = DateUtil.getJavaDate(val);
+                    return d.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                }
+            } else if (cell.getCellType() == CellType.STRING) {
+                return tryParseDateString(cell.getStringCellValue());
+            } else if (cell.getCellType() == CellType.FORMULA) {
+                if (cell.getCachedFormulaResultType() == CellType.NUMERIC) {
+                    double val = cell.getNumericCellValue();
+                    if (val > 30000 && val < 60000) {
+                        Date d = DateUtil.getJavaDate(val);
+                        return d.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+                    }
+                } else if (cell.getCachedFormulaResultType() == CellType.STRING) {
+                    return tryParseDateString(cell.getStringCellValue());
+                }
+            }
+        } catch (Exception ignored) {}
         return null;
     }
 
     private LocalDate tryParseDateString(String str) {
-        if (str == null) return null;
-        str = str.replace('/', '-').trim();
-        List<DateTimeFormatter> formatters = List.of(
-                DateTimeFormatter.ofPattern("yyyy-MM-dd"),
-                DateTimeFormatter.ofPattern("yyyy-M-d"),
-                DateTimeFormatter.ofPattern("dd-MM-yyyy")
+        if (str == null || str.isBlank()) return null;
+        str = str.trim();
+
+        List<String> patterns = List.of(
+                "yyyy/MM/dd", "yyyy/M/d", "yyyy-MM-dd", "yyyy-M-d",
+                "M/d/yyyy", "MM/dd/yyyy", "M-d-yyyy", "MM-dd-yyyy",
+                "d/M/yyyy", "dd/MM/yyyy", "d-M-yyyy", "dd-MM-yyyy"
         );
-        for (DateTimeFormatter fmt : formatters) {
+        for (String pat : patterns) {
             try {
-                return LocalDate.parse(str, fmt);
+                return LocalDate.parse(str, DateTimeFormatter.ofPattern(pat));
             } catch (Exception ignored) {}
         }
+
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{1,4})[/\\-](\\d{1,2})[/\\-](\\d{1,4})").matcher(str);
+            if (m.find()) {
+                int p1 = Integer.parseInt(m.group(1));
+                int p2 = Integer.parseInt(m.group(2));
+                int p3 = Integer.parseInt(m.group(3));
+
+                int y, mVal, d;
+                if (p1 > 1000) {
+                    y = p1;
+                    if (p2 > 12) { d = p2; mVal = p3; }
+                    else { mVal = p2; d = p3; }
+                } else {
+                    y = p3;
+                    if (p1 > 12) { d = p1; mVal = p2; }
+                    else if (p2 > 12) { mVal = p1; d = p2; }
+                    else {
+                        mVal = p1; d = p2;
+                    }
+                }
+                if (y > 1900 && mVal >= 1 && mVal <= 12 && d >= 1 && d <= 31) {
+                    return LocalDate.of(y, mVal, d);
+                }
+            }
+        } catch (Exception ignored) {}
+
         return null;
     }
 
