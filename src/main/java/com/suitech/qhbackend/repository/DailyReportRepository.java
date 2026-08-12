@@ -18,4 +18,8 @@ public interface DailyReportRepository extends JpaRepository<DailyReport, Long> 
 
     @Query("SELECT DISTINCT d.yearNumber, d.monthNumber FROM DailyReport d ORDER BY d.yearNumber DESC, d.monthNumber DESC")
     List<Object[]> findAvailableMonths();
+
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying
+    void deleteByYearNumberAndMonthNumber(Integer yearNumber, Integer monthNumber);
 }

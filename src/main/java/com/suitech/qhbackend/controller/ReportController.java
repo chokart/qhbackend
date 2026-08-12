@@ -125,4 +125,19 @@ public class ReportController {
             return ResponseEntity.badRequest().body(Map.of("message", "Fecha inválida"));
         }
     }
+
+    @DeleteMapping
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> deleteReportByMonth(
+            @RequestParam("year") Integer year,
+            @RequestParam("month") Integer month
+    ) {
+        try {
+            dailyReportRepository.deleteByYearNumberAndMonthNumber(year, month);
+            sapNoticeRepository.deleteByReportYearAndReportMonth(year, month);
+            return ResponseEntity.ok(Map.of("message", "Reporte de " + month + "/" + year + " eliminado correctamente."));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("message", "Error al eliminar el reporte: " + e.getMessage()));
+        }
+    }
 }
