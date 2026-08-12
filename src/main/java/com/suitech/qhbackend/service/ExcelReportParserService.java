@@ -13,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -30,79 +31,102 @@ public class ExcelReportParserService {
         try (InputStream is = file.getInputStream(); Workbook workbook = WorkbookFactory.create(is)) {
             DataFormatter formatter = new DataFormatter();
 
-            int parsedDaysCount = 0;
-            Integer detectedYear = null;
-            Integer detectedMonth = null;
+            // 1. Detectar el Año y Mes global del libro Excel
+            int[] yearMonth = detectWorkbookYearMonth(workbook, formatter);
+            int year = yearMonth[0];
+            int month = yearMonth[1];
 
-            // 1. Recorrer hojas que sean partes diarios ("01" a "31")
+            int parsedDaysCount = 0;
+            int maxDaysInMonth = YearMonth.of(year, month).lengthOfMonth();
+
+            // 2. Recorrer hojas que sean partes diarios ("01" a "31" o "1" a "31")
             for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
                 Sheet sheet = workbook.getSheetAt(i);
-                String name = sheet.getSheetName().trim();
+                String sheetName = sheet.getSheetName().trim();
 
-                if (name.matches("^\\d{2}$")) {
-                    DailyReport report = parseDailySheet(sheet, formatter);
-                    if (report != null && report.getReportDate() != null) {
-                        dailyReportRepository.findByReportDate(report.getReportDate())
-                                .ifPresent(existing -> report.setId(existing.getId()));
+                if (sheetName.matches("^\\d{1,2}$")) {
+                    int day = Integer.parseInt(sheetName);
+                    if (day >= 1 && day <= maxDaysInMonth) {
+                        LocalDate reportDate = LocalDate.of(year, month, day);
+                        DailyReport report = parseDailySheet(sheet, formatter, reportDate);
 
-                        dailyReportRepository.save(report);
-                        parsedDaysCount++;
+                        if (report != null) {
+                            dailyReportRepository.findByReportDate(reportDate)
+                                    .ifPresent(existing -> report.setId(existing.getId()));
 
-                        if (detectedYear == null) {
-                            detectedYear = report.getYearNumber();
-                            detectedMonth = report.getMonthNumber();
+                            dailyReportRepository.save(report);
+                            parsedDaysCount++;
                         }
                     }
                 }
             }
 
-            // 2. Recorrer hoja "Registro aviso SAP" si existe
+            // 3. Recorrer hoja "Registro aviso SAP" si existe
             int sapCount = 0;
             Sheet sapSheet = workbook.getSheet("Registro aviso SAP");
-            if (sapSheet != null && detectedYear != null && detectedMonth != null) {
-                sapNoticeRepository.deleteByReportYearAndReportMonth(detectedYear, detectedMonth);
-                List<SapNotice> notices = parseSapNotices(sapSheet, formatter, detectedYear, detectedMonth);
+            if (sapSheet != null) {
+                sapNoticeRepository.deleteByReportYearAndReportMonth(year, month);
+                List<SapNotice> notices = parseSapNotices(sapSheet, formatter, year, month);
                 sapNoticeRepository.saveAll(notices);
                 sapCount = notices.size();
             }
 
             Map<String, Object> result = new HashMap<>();
             result.put("daysProcessed", parsedDaysCount);
-            result.put("year", detectedYear);
-            result.put("month", detectedMonth);
+            result.put("year", year);
+            result.put("month", month);
             result.put("sapNoticesProcessed", sapCount);
             result.put("message", "Reporte Excel procesado exitosamente.");
             return result;
         }
     }
 
-    private DailyReport parseDailySheet(Sheet sheet, DataFormatter formatter) {
-        try {
-            // Fecha en G3
-            String dateStr = getCellString(sheet, "G3", formatter);
-            Row row3 = sheet.getRow(2);
-            Cell g3Cell = row3 != null ? row3.getCell(6) : null;
-            
-            LocalDate reportDate = parseCellDate(g3Cell);
-            if (reportDate == null && dateStr != null && !dateStr.isBlank()) {
-                reportDate = tryParseDateString(dateStr);
-            }
-
-            // Fallback: Inferir el día a partir del nombre de la hoja (ej. "01" -> 1)
-            if (reportDate == null) {
-                String sheetName = sheet.getSheetName().trim();
-                if (sheetName.matches("^\\d{1,2}$")) {
-                    int day = Integer.parseInt(sheetName);
-                    int year = LocalDate.now().getYear();
-                    int month = LocalDate.now().getMonthValue();
-                    reportDate = LocalDate.of(year, month, day);
+    private int[] detectWorkbookYearMonth(Workbook workbook, DataFormatter formatter) {
+        // Intentar leer fecha en celda G3 de hojas "01", "02", "1", etc.
+        for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+            Sheet sheet = workbook.getSheetAt(i);
+            if (sheet.getSheetName().trim().matches("^\\d{1,2}$")) {
+                Row r3 = sheet.getRow(2);
+                Cell g3 = r3 != null ? r3.getCell(6) : null;
+                LocalDate d = parseCellDate(g3);
+                if (d == null) {
+                    String str = getCellString(sheet, "G3", formatter);
+                    d = tryParseDateString(str);
+                }
+                if (d != null) {
+                    return new int[]{d.getYear(), d.getMonthValue()};
                 }
             }
+        }
 
-            if (reportDate == null) {
-                return null;
+        // Intentar leer en hojas de resumen como "Apex-Vortex" o "KPI"
+        int year = 0;
+        int month = 0;
+
+        Sheet apexSheet = workbook.getSheet("Apex-Vortex");
+        if (apexSheet != null) {
+            String monthStr = getCellString(apexSheet, "K2", formatter);
+            String yearStr = getCellString(apexSheet, "K3", formatter);
+            month = parseMonthName(monthStr);
+            try { year = Integer.parseInt(yearStr); } catch (Exception ignored) {}
+        }
+
+        if (month == 0) {
+            Sheet kpiSheet = workbook.getSheet("KPI");
+            if (kpiSheet != null) {
+                String monthStr = getCellString(kpiSheet, "K2", formatter);
+                month = parseMonthName(monthStr);
             }
+        }
 
+        if (year == 0) year = LocalDate.now().getYear();
+        if (month == 0) month = LocalDate.now().getMonthValue();
+
+        return new int[]{year, month};
+    }
+
+    private DailyReport parseDailySheet(Sheet sheet, DataFormatter formatter, LocalDate reportDate) {
+        try {
             DailyReport report = DailyReport.builder()
                     .reportDate(reportDate)
                     .yearNumber(reportDate.getYear())
@@ -170,7 +194,7 @@ public class ExcelReportParserService {
 
             return report;
         } catch (Exception e) {
-            log.warn("Error parsing sheet {}: {}", sheet.getSheetName(), e.getMessage());
+            log.warn("Error parsing daily sheet {}: {}", sheet.getSheetName(), e.getMessage());
             return null;
         }
     }
@@ -209,6 +233,24 @@ public class ExcelReportParserService {
             list.add(notice);
         }
         return list;
+    }
+
+    private int parseMonthName(String str) {
+        if (str == null) return 0;
+        str = str.trim().toLowerCase();
+        if (str.startsWith("ene")) return 1;
+        if (str.startsWith("feb")) return 2;
+        if (str.startsWith("mar")) return 3;
+        if (str.startsWith("abr")) return 4;
+        if (str.startsWith("may")) return 5;
+        if (str.startsWith("jun")) return 6;
+        if (str.startsWith("jul")) return 7;
+        if (str.startsWith("ago")) return 8;
+        if (str.startsWith("sep") || str.startsWith("set")) return 9;
+        if (str.startsWith("oct")) return 10;
+        if (str.startsWith("nov")) return 11;
+        if (str.startsWith("dic")) return 12;
+        return 0;
     }
 
     private LocalDate parseCellDate(Cell cell) {
