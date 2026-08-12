@@ -36,6 +36,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/v1/auth/**").permitAll()
+                        .requestMatchers("/api/v1/reports/**", "/api/v1/reports").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasAuthority("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/equipment/**").hasAuthority("ADMIN")
@@ -44,7 +45,6 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/v1/canchas/**").authenticated()
                         .requestMatchers("/api/v1/canchas-capas/**").authenticated()
                         .requestMatchers("/api/v1/areas/**").authenticated()
-                        .requestMatchers("/api/v1/reports/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
