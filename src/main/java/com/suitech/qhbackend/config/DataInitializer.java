@@ -205,12 +205,19 @@ public class DataInitializer implements CommandLineRunner {
             Optional<Operator> existing = operatorRepository.findByName(name);
             if (existing.isPresent()) {
                 Operator op = existing.get();
-                op.setCode(code);
-                op.setGroup(assignedGroup);
-                if (op.getRole() == null || op.getRole().isEmpty()) {
-                    op.setRole("OPERADOR");
+                boolean updated = false;
+                if (op.getCode() == null || op.getCode().trim().isEmpty()) {
+                    op.setCode(code);
+                    updated = true;
                 }
-                operatorRepository.save(op);
+                if (op.getRole() == null || op.getRole().trim().isEmpty()) {
+                    op.setRole("OPERADOR");
+                    updated = true;
+                }
+                // NUNCA sobrescribir el grupo asignado por el usuario en la base de datos
+                if (updated) {
+                    operatorRepository.save(op);
+                }
             } else {
                 operatorRepository.save(Operator.builder()
                         .code(code)
