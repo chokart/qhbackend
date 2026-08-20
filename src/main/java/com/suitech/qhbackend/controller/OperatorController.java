@@ -48,6 +48,7 @@ public class OperatorController {
                     .orElse(null);
             operator.setGroup(group);
         }
+        operator.setOnlyDayShift(request.getOnlyDayShift() != null ? request.getOnlyDayShift() : false);
 
         Operator savedOperator = repository.save(operator);
         return ResponseEntity.ok(savedOperator);
@@ -91,12 +92,23 @@ public class OperatorController {
         return ResponseEntity.ok(updatedOperator);
     }
 
+    @PutMapping("/{id}/only-day")
+    public ResponseEntity<Operator> updateOperatorOnlyDay(@PathVariable Integer id, @RequestBody ChangeOnlyDayRequest request) {
+        Operator operator = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Operador no encontrado con ID: " + id));
+
+        operator.setOnlyDayShift(request.getOnlyDayShift() != null ? request.getOnlyDayShift() : false);
+        Operator updatedOperator = repository.save(operator);
+        return ResponseEntity.ok(updatedOperator);
+    }
+
     @Data
     public static class CreateOperatorRequest {
         private String code;
         private String name;
         private String role;
         private Integer groupId;
+        private Boolean onlyDayShift;
     }
 
     @Data
@@ -107,5 +119,10 @@ public class OperatorController {
     @Data
     public static class ChangeRoleRequest {
         private String role;
+    }
+
+    @Data
+    public static class ChangeOnlyDayRequest {
+        private Boolean onlyDayShift;
     }
 }

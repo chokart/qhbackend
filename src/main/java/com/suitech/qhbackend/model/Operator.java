@@ -28,4 +28,7 @@ public class Operator {
     @ManyToOne
     @JoinColumn(name = "group_id")
     private Group group;
+
+    @Column(name = "only_day_shift")
+    private Boolean onlyDayShift = false;
 }

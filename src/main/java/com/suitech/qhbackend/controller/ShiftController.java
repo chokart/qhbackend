@@ -103,6 +103,9 @@ public class ShiftController {
                     int patternIdx = (int) (daysDiff % pattern.size());
                     baseShift = pattern.get(patternIdx);
                 }
+                if (Boolean.TRUE.equals(op.getOnlyDayShift()) && "N".equals(baseShift)) {
+                    baseShift = "D";
+                }
                 baseShifts.put(day, baseShift);
 
                 if (overrideMap.containsKey(ovKey)) {
@@ -122,6 +125,7 @@ public class ShiftController {
             data.setCode(op.getCode());
             data.setName(op.getName());
             data.setRole(op.getRole() != null ? op.getRole() : "OPERADOR");
+            data.setOnlyDayShift(op.getOnlyDayShift() != null ? op.getOnlyDayShift() : false);
             data.setGroupId(group != null ? group.getId() : null);
             data.setGroupName(group != null ? group.getName() : "Sin Guardia");
             data.setGroupColor(group != null ? group.getColor() : "#94a3b8");
@@ -208,6 +212,9 @@ public class ShiftController {
                     int patternIdx = (int) (daysDiff % pattern.size());
                     baseShift = pattern.get(patternIdx);
                 }
+                if (Boolean.TRUE.equals(op.getOnlyDayShift()) && "N".equals(baseShift)) {
+                    baseShift = "D";
+                }
 
                 String finalShift;
                 boolean isOverride = false;
@@ -252,6 +259,7 @@ public class ShiftController {
             data.setCode(op.getCode());
             data.setName(op.getName());
             data.setRole(op.getRole() != null ? op.getRole() : "OPERADOR");
+            data.setOnlyDayShift(op.getOnlyDayShift() != null ? op.getOnlyDayShift() : false);
             data.setGroupId(group != null ? group.getId() : null);
             data.setGroupName(group != null ? group.getName() : "Sin Guardia");
             data.setGroupColor(group != null ? group.getColor() : "#94a3b8");
@@ -318,6 +326,7 @@ public class ShiftController {
         private String code;
         private String name;
         private String role;
+        private Boolean onlyDayShift;
         private Integer groupId;
         private String groupName;
         private String groupColor;
@@ -349,6 +358,7 @@ public class ShiftController {
         private String code;
         private String name;
         private String role;
+        private Boolean onlyDayShift;
         private Integer groupId;
         private String groupName;
         private String groupColor;
