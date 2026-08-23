@@ -39,50 +39,18 @@ public class ExcelReportParserService {
             int parsedDaysCount = 0;
             int maxDaysInMonth = YearMonth.of(year, month).lengthOfMonth();
 
-            // 2. Extraer producción PRIMARIAMENTE de las pestañas DP y DL si existen
+            // 2. Extraer producción PRIMARIAMENTE evaluando FILA POR FILA (Col A: Fecha, Col B: Turno A/B) en DP y DL
             Sheet dpSheet = workbook.getSheet("DP");
             Sheet dlSheet = workbook.getSheet("DL");
 
-            int dpTmsdCol = findTmsdColumnIndex(dpSheet, formatter);
-            int dlTmsdCol = findTmsdColumnIndex(dlSheet, formatter);
-
             if (dpSheet != null || dlSheet != null) {
-                for (int day = 1; day <= maxDaysInMonth; day++) {
-                    LocalDate reportDate = LocalDate.of(year, month, day);
-
-                    int rowIdxA = 9 + (day - 1) * 2;     // Turno A
-                    int rowIdxB = 9 + (day - 1) * 2 + 1; // Turno B
-
-                    double dpA = extractProdFromSheetRow(dpSheet, rowIdxA, dpTmsdCol);
-                    double dpB = extractProdFromSheetRow(dpSheet, rowIdxB, dpTmsdCol);
-
-                    double dlA = extractProdFromSheetRow(dlSheet, rowIdxA, dlTmsdCol);
-                    double dlB = extractProdFromSheetRow(dlSheet, rowIdxB, dlTmsdCol);
-
-                    final int currentDay = day;
-                    Optional<DailyReport> existingOpt = dailyReportRepository.findByReportDate(reportDate);
-                    DailyReport report = existingOpt.orElseGet(() -> DailyReport.builder()
-                            .reportDate(reportDate)
-                            .yearNumber(year)
-                            .monthNumber(month)
-                            .dayNumber(currentDay)
-                            .build());
-
-                    report.setDpArenasGuardiaA(dpA);
-                    report.setDpArenasGuardiaB(dpB);
-                    report.setDpArenasTotalDia(dpA + dpB);
-
-                    report.setDlArenasGuardiaA(dlA);
-                    report.setDlArenasGuardiaB(dlB);
-                    report.setDlArenasTotalDia(dlA + dlB);
-
-                    report.setTotalArenasGuardiaA(dpA + dlA);
-                    report.setTotalArenasGuardiaB(dpB + dlB);
-                    report.setTotalArenasDia(dpA + dpB + dlA + dlB);
-
-                    dailyReportRepository.save(report);
-                    parsedDaysCount++;
+                if (dpSheet != null) {
+                    parseSheetRowByRow(dpSheet, "DP", year, month, formatter);
                 }
+                if (dlSheet != null) {
+                    parseSheetRowByRow(dlSheet, "DL", year, month, formatter);
+                }
+                parsedDaysCount = maxDaysInMonth;
             }
 
             // 2b. Recorrer partes diarios ("01" a "31") para complementar si existen
@@ -161,9 +129,105 @@ public class ExcelReportParserService {
             result.put("year", year);
             result.put("month", month);
             result.put("sapNoticesProcessed", sapCount);
-            result.put("message", "Reporte Excel procesado exitosamente desde pestañas DP y DL.");
+            result.put("message", "Reporte Excel procesado exitosamente desde pestañas DP y DL (evaluación por filas y turnos A/B).");
             return result;
         }
+    }
+
+    private void parseSheetRowByRow(Sheet sheet, String sectorName, int year, int month, DataFormatter formatter) {
+        if (sheet == null) return;
+
+        int tmsdColIdx = findTmsdColumnIndex(sheet, formatter);
+        int currentDayFallback = 1;
+
+        for (int r = 5; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+
+            String turnoStr = formatter.formatCellValue(row.getCell(1)).trim();
+            if (!turnoStr.equalsIgnoreCase("A") && !turnoStr.equalsIgnoreCase("B")) {
+                continue; // Omitir filas que no son registros de turno A o B
+            }
+
+            LocalDate rowDate = parseRowDate(row.getCell(0), year, month, currentDayFallback);
+            double tmsdVal = extractProdFromSheetRow(sheet, r, tmsdColIdx);
+
+            Optional<DailyReport> existingOpt = dailyReportRepository.findByReportDate(rowDate);
+            DailyReport report = existingOpt.orElseGet(() -> DailyReport.builder()
+                    .reportDate(rowDate)
+                    .yearNumber(rowDate.getYear())
+                    .monthNumber(rowDate.getMonthValue())
+                    .dayNumber(rowDate.getDayOfMonth())
+                    .build());
+
+            if (sectorName.equalsIgnoreCase("DP")) {
+                if (turnoStr.equalsIgnoreCase("A")) {
+                    report.setDpArenasGuardiaA(tmsdVal);
+                } else {
+                    report.setDpArenasGuardiaB(tmsdVal);
+                }
+                double dpA = report.getDpArenasGuardiaA() != null ? report.getDpArenasGuardiaA() : 0.0;
+                double dpB = report.getDpArenasGuardiaB() != null ? report.getDpArenasGuardiaB() : 0.0;
+                report.setDpArenasTotalDia(dpA + dpB);
+            } else if (sectorName.equalsIgnoreCase("DL")) {
+                if (turnoStr.equalsIgnoreCase("A")) {
+                    report.setDlArenasGuardiaA(tmsdVal);
+                } else {
+                    report.setDlArenasGuardiaB(tmsdVal);
+                }
+                double dlA = report.getDlArenasGuardiaA() != null ? report.getDlArenasGuardiaA() : 0.0;
+                double dlB = report.getDlArenasGuardiaB() != null ? report.getDlArenasGuardiaB() : 0.0;
+                report.setDlArenasTotalDia(dlA + dlB);
+            }
+
+            double dpA = report.getDpArenasGuardiaA() != null ? report.getDpArenasGuardiaA() : 0.0;
+            double dpB = report.getDpArenasGuardiaB() != null ? report.getDpArenasGuardiaB() : 0.0;
+            double dlA = report.getDlArenasGuardiaA() != null ? report.getDlArenasGuardiaA() : 0.0;
+            double dlB = report.getDlArenasGuardiaB() != null ? report.getDlArenasGuardiaB() : 0.0;
+
+            report.setTotalArenasGuardiaA(dpA + dlA);
+            report.setTotalArenasGuardiaB(dpB + dlB);
+            report.setTotalArenasDia(dpA + dpB + dlA + dlB);
+
+            dailyReportRepository.save(report);
+
+            if (turnoStr.equalsIgnoreCase("B")) {
+                currentDayFallback++;
+            }
+        }
+    }
+
+    private LocalDate parseRowDate(Cell cell, int year, int month, int fallbackDay) {
+        if (cell == null) return LocalDate.of(year, month, Math.min(fallbackDay, 31));
+        try {
+            if (cell.getCellType() == CellType.NUMERIC) {
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    Date date = cell.getDateCellValue();
+                    return date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+                }
+                double num = cell.getNumericCellValue();
+                if (num > 40000 && num < 60000) {
+                    Date date = DateUtil.getJavaDate(num);
+                    return date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+                }
+                if (num >= 1 && num <= 31) {
+                    return LocalDate.of(year, month, (int) num);
+                }
+            }
+            if (cell.getCellType() == CellType.FORMULA) {
+                try {
+                    double num = cell.getNumericCellValue();
+                    if (num > 40000 && num < 60000) {
+                        Date date = DateUtil.getJavaDate(num);
+                        return date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+                    }
+                    if (num >= 1 && num <= 31) {
+                        return LocalDate.of(year, month, (int) num);
+                    }
+                } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {}
+        return LocalDate.of(year, month, Math.min(fallbackDay, 31));
     }
 
     private int findTmsdColumnIndex(Sheet sheet, DataFormatter formatter) {
