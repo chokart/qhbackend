@@ -233,7 +233,23 @@ public class ExcelReportParserService {
     private int findTmsdColumnIndex(Sheet sheet, DataFormatter formatter) {
         if (sheet == null) return -1;
 
-        // 1. Buscar coincidencia exacta "TMSD" en encabezados (filas 0 a 15)
+        // 1. En hoja DL, buscar la columna con encabezado "Producción 2800+L4" o "TMS" en la sección DL (Col AR / 43)
+        if (sheet.getSheetName().trim().equalsIgnoreCase("DL")) {
+            for (int r = 0; r <= 10; r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) continue;
+                for (int c = 0; c < row.getLastCellNum(); c++) {
+                    Cell cell = row.getCell(c);
+                    String val = formatter.formatCellValue(cell).trim();
+                    if (val.contains("2800+L4") || val.contains("Dique Lateral")) {
+                        return c;
+                    }
+                }
+            }
+            return 43; // Columna AR en DL (Producción 2800+L4 TMS: 3766, 8125, 12291)
+        }
+
+        // 2. Buscar coincidencia exacta "TMSD" (usada en DP para "Producción Total 2101+Baterías")
         for (int r = 0; r <= 15; r++) {
             Row row = sheet.getRow(r);
             if (row == null) continue;
@@ -246,20 +262,7 @@ public class ExcelReportParserService {
             }
         }
 
-        // 2. Buscar celdas con "TMS2800" o "TMS" en la sección de producción
-        for (int r = 0; r <= 15; r++) {
-            Row row = sheet.getRow(r);
-            if (row == null) continue;
-            for (int c = 0; c < row.getLastCellNum(); c++) {
-                Cell cell = row.getCell(c);
-                String val = formatter.formatCellValue(cell).trim().replaceAll("\\s+", "");
-                if (val.equalsIgnoreCase("TMS2800") || val.equalsIgnoreCase("TMS")) {
-                    return c;
-                }
-            }
-        }
-
-        return -1;
+        return 113; // Columna DJ en DP (TMSD)
     }
 
     private double extractProdFromSheetRow(Sheet sheet, int rowIdx, int tmsdColIdx) {
@@ -267,33 +270,39 @@ public class ExcelReportParserService {
         Row row = sheet.getRow(rowIdx);
         if (row == null) return 0.0;
 
-        // 1. Si se encontró la columna dinámica con título TMSD, extraer su valor directo
+        // 1. Si se detectó columna específica para la hoja (ej. Col 43/AR en DL o Col 113/DJ en DP), usarla primero
         if (tmsdColIdx >= 0) {
-            double tmsdVal = getNumericCellValue(row.getCell(tmsdColIdx));
-            if (tmsdVal > 0) return tmsdVal;
+            double val = getNumericCellValue(row.getCell(tmsdColIdx));
+            if (val > 0) return val;
         }
 
-        // 2. Probar celda DJ (Columna 113) o CX (Columna 101: Producción Real 2101 / TMS)
+        // 2. Si es la hoja DL, priorizar columna AR (43: Producción 2800+L4 TMS)
+        if (sheet.getSheetName().trim().equalsIgnoreCase("DL")) {
+            double ar = getNumericCellValue(row.getCell(43));
+            if (ar > 0) return ar;
+        }
+
+        // 3. Probar celda DJ (113) o CX (101)
         double dj = getNumericCellValue(row.getCell(113));
         if (dj > 0) return dj;
 
         double cx = getNumericCellValue(row.getCell(101));
         if (cx > 0) return cx;
 
-        // 3. Probar celda AT (Columna 45) o AR (Columna 43: Producción de arenas 2800)
+        // 4. Probar celda AT (45) o AR (43)
         double c45 = getNumericCellValue(row.getCell(45));
         if (c45 > 0) return c45;
 
         double c43 = getNumericCellValue(row.getCell(43));
         if (c43 > 0) return c43;
 
-        // 4. Probar relaves enviados (Columna 8 + Columna 16)
+        // 5. Probar relaves enviados (Col 8 + Col 16)
         double c8 = getNumericCellValue(row.getCell(8));
         double c16 = getNumericCellValue(row.getCell(16));
         double sum8_16 = c8 + c16;
         if (sum8_16 > 0) return sum8_16;
 
-        // 5. Probar Underflow (Columna 30 + Columna 32)
+        // 6. Probar Underflow (Col 30 + Col 32)
         double c30 = getNumericCellValue(row.getCell(30));
         double c32 = getNumericCellValue(row.getCell(32));
         return c30 + c32;
