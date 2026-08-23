@@ -70,12 +70,36 @@ public class ReportController {
         List<SapNotice> sapNotices = sapNoticeRepository
                 .findByReportYearAndReportMonth(year, month);
 
-        // Resumen Acumulado
+        // Resumen Acumulado por Dique y Turno
+        double totalDpArenasA = dailyReports.stream()
+                .mapToDouble(d -> d.getDpArenasGuardiaA() != null ? d.getDpArenasGuardiaA() : 0.0).sum();
+
+        double totalDpArenasB = dailyReports.stream()
+                .mapToDouble(d -> d.getDpArenasGuardiaB() != null ? d.getDpArenasGuardiaB() : 0.0).sum();
+
         double totalDpArenas = dailyReports.stream()
                 .mapToDouble(d -> d.getDpArenasTotalDia() != null ? d.getDpArenasTotalDia() : 0.0).sum();
 
+        double totalDlArenasA = dailyReports.stream()
+                .mapToDouble(d -> d.getDlArenasGuardiaA() != null ? d.getDlArenasGuardiaA() : 0.0).sum();
+
+        double totalDlArenasB = dailyReports.stream()
+                .mapToDouble(d -> d.getDlArenasGuardiaB() != null ? d.getDlArenasGuardiaB() : 0.0).sum();
+
         double totalDlArenas = dailyReports.stream()
                 .mapToDouble(d -> d.getDlArenasTotalDia() != null ? d.getDlArenasTotalDia() : 0.0).sum();
+
+        double totalArenasA = dailyReports.stream()
+                .mapToDouble(d -> d.getTotalArenasGuardiaA() != null ? d.getTotalArenasGuardiaA() : (
+                        (d.getDpArenasGuardiaA() != null ? d.getDpArenasGuardiaA() : 0.0) +
+                        (d.getDlArenasGuardiaA() != null ? d.getDlArenasGuardiaA() : 0.0)
+                )).sum();
+
+        double totalArenasB = dailyReports.stream()
+                .mapToDouble(d -> d.getTotalArenasGuardiaB() != null ? d.getTotalArenasGuardiaB() : (
+                        (d.getDpArenasGuardiaB() != null ? d.getDpArenasGuardiaB() : 0.0) +
+                        (d.getDlArenasGuardiaB() != null ? d.getDlArenasGuardiaB() : 0.0)
+                )).sum();
 
         double totalArenasMes = dailyReports.stream()
                 .mapToDouble(d -> d.getTotalArenasDia() != null ? d.getTotalArenasDia() : 0.0).sum();
@@ -99,8 +123,14 @@ public class ReportController {
         response.put("year", year);
         response.put("month", month);
         response.put("daysCount", dailyReports.size());
+        response.put("totalDpArenasA", totalDpArenasA);
+        response.put("totalDpArenasB", totalDpArenasB);
         response.put("totalDpArenas", totalDpArenas);
+        response.put("totalDlArenasA", totalDlArenasA);
+        response.put("totalDlArenasB", totalDlArenasB);
         response.put("totalDlArenas", totalDlArenas);
+        response.put("totalArenasA", totalArenasA);
+        response.put("totalArenasB", totalArenasB);
         response.put("totalArenasMes", totalArenasMes);
         response.put("avgNivelPresaDp", avgNivelPresaDp);
         response.put("avgNivelPresaDl", avgNivelPresaDl);
