@@ -39,7 +39,50 @@ public class ExcelReportParserService {
             int parsedDaysCount = 0;
             int maxDaysInMonth = YearMonth.of(year, month).lengthOfMonth();
 
-            // 2. Recorrer hojas que sean partes diarios ("01" a "31" o "1" a "31")
+            // 2. Extraer producción PRIMARIAMENTE de las pestañas DP y DL si existen
+            Sheet dpSheet = workbook.getSheet("DP");
+            Sheet dlSheet = workbook.getSheet("DL");
+
+            if (dpSheet != null || dlSheet != null) {
+                for (int day = 1; day <= maxDaysInMonth; day++) {
+                    LocalDate reportDate = LocalDate.of(year, month, day);
+
+                    int rowIdxA = 9 + (day - 1) * 2;     // Turno A
+                    int rowIdxB = 9 + (day - 1) * 2 + 1; // Turno B
+
+                    double dpA = extractProdFromSheetRow(dpSheet, rowIdxA);
+                    double dpB = extractProdFromSheetRow(dpSheet, rowIdxB);
+
+                    double dlA = extractProdFromSheetRow(dlSheet, rowIdxA);
+                    double dlB = extractProdFromSheetRow(dlSheet, rowIdxB);
+
+                    final int currentDay = day;
+                    Optional<DailyReport> existingOpt = dailyReportRepository.findByReportDate(reportDate);
+                    DailyReport report = existingOpt.orElseGet(() -> DailyReport.builder()
+                            .reportDate(reportDate)
+                            .yearNumber(year)
+                            .monthNumber(month)
+                            .dayNumber(currentDay)
+                            .build());
+
+                    report.setDpArenasGuardiaA(dpA);
+                    report.setDpArenasGuardiaB(dpB);
+                    report.setDpArenasTotalDia(dpA + dpB);
+
+                    report.setDlArenasGuardiaA(dlA);
+                    report.setDlArenasGuardiaB(dlB);
+                    report.setDlArenasTotalDia(dlA + dlB);
+
+                    report.setTotalArenasGuardiaA(dpA + dlA);
+                    report.setTotalArenasGuardiaB(dpB + dlB);
+                    report.setTotalArenasDia(dpA + dpB + dlA + dlB);
+
+                    dailyReportRepository.save(report);
+                    parsedDaysCount++;
+                }
+            }
+
+            // 2b. Recorrer partes diarios ("01" a "31") para complementar si existen
             for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
                 Sheet sheet = workbook.getSheetAt(i);
                 String sheetName = sheet.getSheetName().trim();
@@ -48,20 +91,36 @@ public class ExcelReportParserService {
                     int day = Integer.parseInt(sheetName);
                     if (day >= 1 && day <= maxDaysInMonth) {
                         LocalDate reportDate = LocalDate.of(year, month, day);
-                        DailyReport report = parseDailySheet(sheet, formatter, reportDate);
+                        DailyReport dailySheetReport = parseDailySheet(sheet, formatter, reportDate);
 
-                        if (report != null) {
-                            dailyReportRepository.findByReportDate(reportDate)
-                                    .ifPresent(existing -> report.setId(existing.getId()));
-
-                            dailyReportRepository.save(report);
-                            parsedDaysCount++;
+                        if (dailySheetReport != null) {
+                            Optional<DailyReport> existingOpt = dailyReportRepository.findByReportDate(reportDate);
+                            if (existingOpt.isPresent()) {
+                                DailyReport existing = existingOpt.get();
+                                if (existing.getDpArenasTotalDia() == null || existing.getDpArenasTotalDia() == 0) {
+                                    existing.setDpArenasGuardiaA(dailySheetReport.getDpArenasGuardiaA());
+                                    existing.setDpArenasGuardiaB(dailySheetReport.getDpArenasGuardiaB());
+                                    existing.setDpArenasTotalDia(dailySheetReport.getDpArenasTotalDia());
+                                }
+                                if (existing.getDlArenasTotalDia() == null || existing.getDlArenasTotalDia() == 0) {
+                                    existing.setDlArenasGuardiaA(dailySheetReport.getDlArenasGuardiaA());
+                                    existing.setDlArenasGuardiaB(dailySheetReport.getDlArenasGuardiaB());
+                                    existing.setDlArenasTotalDia(dailySheetReport.getDlArenasTotalDia());
+                                }
+                                existing.setTotalArenasGuardiaA((existing.getDpArenasGuardiaA() != null ? existing.getDpArenasGuardiaA() : 0) + (existing.getDlArenasGuardiaA() != null ? existing.getDlArenasGuardiaA() : 0));
+                                existing.setTotalArenasGuardiaB((existing.getDpArenasGuardiaB() != null ? existing.getDpArenasGuardiaB() : 0) + (existing.getDlArenasGuardiaB() != null ? existing.getDlArenasGuardiaB() : 0));
+                                existing.setTotalArenasDia((existing.getDpArenasTotalDia() != null ? existing.getDpArenasTotalDia() : 0) + (existing.getDlArenasTotalDia() != null ? existing.getDlArenasTotalDia() : 0));
+                                dailyReportRepository.save(existing);
+                            } else {
+                                dailyReportRepository.save(dailySheetReport);
+                                parsedDaysCount++;
+                            }
                         }
                     }
                 }
             }
 
-            // 2b. Garantizar que TODOS los días del mes (01 al 28/29/30/31) existan en la base de datos
+            // 2c. Garantizar que TODOS los días del mes existan en la base de datos
             for (int day = 1; day <= maxDaysInMonth; day++) {
                 LocalDate reportDate = LocalDate.of(year, month, day);
                 if (!dailyReportRepository.findByReportDate(reportDate).isPresent()) {
@@ -99,12 +158,71 @@ public class ExcelReportParserService {
             result.put("year", year);
             result.put("month", month);
             result.put("sapNoticesProcessed", sapCount);
-            result.put("message", "Reporte Excel procesado exitosamente.");
+            result.put("message", "Reporte Excel procesado exitosamente desde pestañas DP y DL.");
             return result;
         }
     }
 
+    private double extractProdFromSheetRow(Sheet sheet, int rowIdx) {
+        if (sheet == null || rowIdx > sheet.getLastRowNum()) return 0.0;
+        Row row = sheet.getRow(rowIdx);
+        if (row == null) return 0.0;
+
+        double c8 = getNumericCellValue(row.getCell(8));
+        double c16 = getNumericCellValue(row.getCell(16));
+        double c30 = getNumericCellValue(row.getCell(30));
+        double c32 = getNumericCellValue(row.getCell(32));
+        double c43 = getNumericCellValue(row.getCell(43));
+        double c45 = getNumericCellValue(row.getCell(45));
+
+        double sum8_16 = c8 + c16;
+        if (sum8_16 > 0) return sum8_16;
+
+        double sum30_32 = c30 + c32;
+        if (sum30_32 > 0) return sum30_32;
+
+        if (c45 > 0) return c45;
+        return c43;
+    }
+
+    private double getNumericCellValue(Cell cell) {
+        if (cell == null) return 0.0;
+        try {
+            switch (cell.getCellType()) {
+                case NUMERIC:
+                    return cell.getNumericCellValue();
+                case FORMULA:
+                    try { return cell.getNumericCellValue(); } catch (Exception e) { return 0.0; }
+                case STRING:
+                    try { return Double.parseDouble(cell.getStringCellValue().trim().replace(",", "")); } catch (Exception e) { return 0.0; }
+                default:
+                    return 0.0;
+            }
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+
     private int[] detectWorkbookYearMonth(Workbook workbook, DataFormatter formatter) {
+        // 1. Intentar detectar en hojas DP o DL primero
+        Sheet dp = workbook.getSheet("DP");
+        Sheet dl = workbook.getSheet("DL");
+        Sheet refSheet = dp != null ? dp : dl;
+        if (refSheet != null) {
+            String mStr = getCellString(refSheet, "N3", formatter);
+            if (mStr.isEmpty()) mStr = getCellString(refSheet, "K3", formatter);
+            String yStr = getCellString(refSheet, "N4", formatter);
+            if (yStr.isEmpty()) yStr = getCellString(refSheet, "K4", formatter);
+
+            int m = parseMonthName(mStr);
+            int y = 0;
+            try { y = Integer.parseInt(yStr); } catch (Exception ignored) {}
+
+            if (m > 0 && y > 0) {
+                return new int[]{y, m};
+            }
+        }
+
         // Intentar leer fecha en celda G3 de hojas "01", "02", "1", etc.
         for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
             Sheet sheet = workbook.getSheetAt(i);
