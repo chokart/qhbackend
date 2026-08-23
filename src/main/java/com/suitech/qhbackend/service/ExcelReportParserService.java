@@ -43,6 +43,9 @@ public class ExcelReportParserService {
             Sheet dpSheet = workbook.getSheet("DP");
             Sheet dlSheet = workbook.getSheet("DL");
 
+            int dpTmsdCol = findTmsdColumnIndex(dpSheet, formatter);
+            int dlTmsdCol = findTmsdColumnIndex(dlSheet, formatter);
+
             if (dpSheet != null || dlSheet != null) {
                 for (int day = 1; day <= maxDaysInMonth; day++) {
                     LocalDate reportDate = LocalDate.of(year, month, day);
@@ -50,11 +53,11 @@ public class ExcelReportParserService {
                     int rowIdxA = 9 + (day - 1) * 2;     // Turno A
                     int rowIdxB = 9 + (day - 1) * 2 + 1; // Turno B
 
-                    double dpA = extractProdFromSheetRow(dpSheet, rowIdxA);
-                    double dpB = extractProdFromSheetRow(dpSheet, rowIdxB);
+                    double dpA = extractProdFromSheetRow(dpSheet, rowIdxA, dpTmsdCol);
+                    double dpB = extractProdFromSheetRow(dpSheet, rowIdxB, dpTmsdCol);
 
-                    double dlA = extractProdFromSheetRow(dlSheet, rowIdxA);
-                    double dlB = extractProdFromSheetRow(dlSheet, rowIdxB);
+                    double dlA = extractProdFromSheetRow(dlSheet, rowIdxA, dlTmsdCol);
+                    double dlB = extractProdFromSheetRow(dlSheet, rowIdxB, dlTmsdCol);
 
                     final int currentDay = day;
                     Optional<DailyReport> existingOpt = dailyReportRepository.findByReportDate(reportDate);
@@ -163,29 +166,70 @@ public class ExcelReportParserService {
         }
     }
 
-    private double extractProdFromSheetRow(Sheet sheet, int rowIdx) {
+    private int findTmsdColumnIndex(Sheet sheet, DataFormatter formatter) {
+        if (sheet == null) return -1;
+
+        // 1. Buscar coincidencia exacta "TMSD" en encabezados (filas 0 a 15)
+        for (int r = 0; r <= 15; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+            for (int c = 0; c < row.getLastCellNum(); c++) {
+                Cell cell = row.getCell(c);
+                String val = formatter.formatCellValue(cell).trim().replaceAll("\\s+", "");
+                if (val.equalsIgnoreCase("TMSD")) {
+                    return c;
+                }
+            }
+        }
+
+        // 2. Buscar celdas con "TMS2800" o "TMS" en la sección de producción
+        for (int r = 0; r <= 15; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+            for (int c = 0; c < row.getLastCellNum(); c++) {
+                Cell cell = row.getCell(c);
+                String val = formatter.formatCellValue(cell).trim().replaceAll("\\s+", "");
+                if (val.equalsIgnoreCase("TMS2800") || val.equalsIgnoreCase("TMS")) {
+                    return c;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    private double extractProdFromSheetRow(Sheet sheet, int rowIdx, int tmsdColIdx) {
         if (sheet == null || rowIdx > sheet.getLastRowNum()) return 0.0;
         Row row = sheet.getRow(rowIdx);
         if (row == null) return 0.0;
 
-        // 1. Probar celda CX (Columna 101: Producción Real 2101 / TMS)
+        // 1. Si se encontró la columna dinámica con título TMSD, extraer su valor directo
+        if (tmsdColIdx >= 0) {
+            double tmsdVal = getNumericCellValue(row.getCell(tmsdColIdx));
+            if (tmsdVal > 0) return tmsdVal;
+        }
+
+        // 2. Probar celda DJ (Columna 113) o CX (Columna 101: Producción Real 2101 / TMS)
+        double dj = getNumericCellValue(row.getCell(113));
+        if (dj > 0) return dj;
+
         double cx = getNumericCellValue(row.getCell(101));
         if (cx > 0) return cx;
 
-        // 2. Probar celda AT (Columna 45) o AR (Columna 43: Producción de arenas 2800)
+        // 3. Probar celda AT (Columna 45) o AR (Columna 43: Producción de arenas 2800)
         double c45 = getNumericCellValue(row.getCell(45));
         if (c45 > 0) return c45;
 
         double c43 = getNumericCellValue(row.getCell(43));
         if (c43 > 0) return c43;
 
-        // 3. Probar relaves enviados (Columna 8 + Columna 16)
+        // 4. Probar relaves enviados (Columna 8 + Columna 16)
         double c8 = getNumericCellValue(row.getCell(8));
         double c16 = getNumericCellValue(row.getCell(16));
         double sum8_16 = c8 + c16;
         if (sum8_16 > 0) return sum8_16;
 
-        // 4. Probar Underflow (Columna 30 + Columna 32)
+        // 5. Probar Underflow (Columna 30 + Columna 32)
         double c30 = getNumericCellValue(row.getCell(30));
         double c32 = getNumericCellValue(row.getCell(32));
         return c30 + c32;
