@@ -168,21 +168,27 @@ public class ExcelReportParserService {
         Row row = sheet.getRow(rowIdx);
         if (row == null) return 0.0;
 
+        // 1. Probar celda CX (Columna 101: Producción Real 2101 / TMS)
+        double cx = getNumericCellValue(row.getCell(101));
+        if (cx > 0) return cx;
+
+        // 2. Probar celda AT (Columna 45) o AR (Columna 43: Producción de arenas 2800)
+        double c45 = getNumericCellValue(row.getCell(45));
+        if (c45 > 0) return c45;
+
+        double c43 = getNumericCellValue(row.getCell(43));
+        if (c43 > 0) return c43;
+
+        // 3. Probar relaves enviados (Columna 8 + Columna 16)
         double c8 = getNumericCellValue(row.getCell(8));
         double c16 = getNumericCellValue(row.getCell(16));
-        double c30 = getNumericCellValue(row.getCell(30));
-        double c32 = getNumericCellValue(row.getCell(32));
-        double c43 = getNumericCellValue(row.getCell(43));
-        double c45 = getNumericCellValue(row.getCell(45));
-
         double sum8_16 = c8 + c16;
         if (sum8_16 > 0) return sum8_16;
 
-        double sum30_32 = c30 + c32;
-        if (sum30_32 > 0) return sum30_32;
-
-        if (c45 > 0) return c45;
-        return c43;
+        // 4. Probar Underflow (Columna 30 + Columna 32)
+        double c30 = getNumericCellValue(row.getCell(30));
+        double c32 = getNumericCellValue(row.getCell(32));
+        return c30 + c32;
     }
 
     private double getNumericCellValue(Cell cell) {
