@@ -67,6 +67,41 @@ public class ReportController {
         List<DailyReport> dailyReports = dailyReportRepository
                 .findByYearNumberAndMonthNumberOrderByDayNumberAsc(year, month);
 
+        // Garantizar que existan registros para TODOS los días del mes (01 al 28/29/30/31)
+        int maxDaysInMonth = java.time.YearMonth.of(year, month).lengthOfMonth();
+        Set<Integer> existingDays = dailyReports.stream()
+                .map(DailyReport::getDayNumber)
+                .collect(java.util.stream.Collectors.toSet());
+
+        boolean addedMissing = false;
+        for (int day = 1; day <= maxDaysInMonth; day++) {
+            if (!existingDays.contains(day)) {
+                LocalDate reportDate = LocalDate.of(year, month, day);
+                DailyReport emptyReport = DailyReport.builder()
+                        .reportDate(reportDate)
+                        .yearNumber(year)
+                        .monthNumber(month)
+                        .dayNumber(day)
+                        .dpArenasGuardiaA(0.0)
+                        .dpArenasGuardiaB(0.0)
+                        .dpArenasTotalDia(0.0)
+                        .dlArenasGuardiaA(0.0)
+                        .dlArenasGuardiaB(0.0)
+                        .dlArenasTotalDia(0.0)
+                        .totalArenasGuardiaA(0.0)
+                        .totalArenasGuardiaB(0.0)
+                        .totalArenasDia(0.0)
+                        .build();
+                dailyReportRepository.save(emptyReport);
+                addedMissing = true;
+            }
+        }
+
+        if (addedMissing) {
+            dailyReports = dailyReportRepository
+                    .findByYearNumberAndMonthNumberOrderByDayNumberAsc(year, month);
+        }
+
         List<SapNotice> sapNotices = sapNoticeRepository
                 .findByReportYearAndReportMonth(year, month);
 
@@ -153,6 +188,47 @@ public class ReportController {
             return ResponseEntity.notFound().build();
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "Fecha inválida"));
+        }
+    }
+
+    @PutMapping("/daily/{id}")
+    public ResponseEntity<?> updateDailyReport(
+            @PathVariable("id") Long id,
+            @RequestBody Map<String, Object> body
+    ) {
+        Optional<DailyReport> opt = dailyReportRepository.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        DailyReport report = opt.get();
+
+        double dpA = parseDouble(body.get("dpArenasGuardiaA"));
+        double dpB = parseDouble(body.get("dpArenasGuardiaB"));
+        double dlA = parseDouble(body.get("dlArenasGuardiaA"));
+        double dlB = parseDouble(body.get("dlArenasGuardiaB"));
+
+        report.setDpArenasGuardiaA(dpA);
+        report.setDpArenasGuardiaB(dpB);
+        report.setDpArenasTotalDia(dpA + dpB);
+
+        report.setDlArenasGuardiaA(dlA);
+        report.setDlArenasGuardiaB(dlB);
+        report.setDlArenasTotalDia(dlA + dlB);
+
+        report.setTotalArenasGuardiaA(dpA + dlA);
+        report.setTotalArenasGuardiaB(dpB + dlB);
+        report.setTotalArenasDia(dpA + dpB + dlA + dlB);
+
+        dailyReportRepository.save(report);
+        return ResponseEntity.ok(report);
+    }
+
+    private double parseDouble(Object val) {
+        if (val == null) return 0.0;
+        try {
+            return Double.parseDouble(val.toString());
+        } catch (Exception e) {
+            return 0.0;
         }
     }
 

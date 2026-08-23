@@ -61,6 +61,29 @@ public class ExcelReportParserService {
                 }
             }
 
+            // 2b. Garantizar que TODOS los días del mes (01 al 28/29/30/31) existan en la base de datos
+            for (int day = 1; day <= maxDaysInMonth; day++) {
+                LocalDate reportDate = LocalDate.of(year, month, day);
+                if (!dailyReportRepository.findByReportDate(reportDate).isPresent()) {
+                    DailyReport emptyReport = DailyReport.builder()
+                            .reportDate(reportDate)
+                            .yearNumber(year)
+                            .monthNumber(month)
+                            .dayNumber(day)
+                            .dpArenasGuardiaA(0.0)
+                            .dpArenasGuardiaB(0.0)
+                            .dpArenasTotalDia(0.0)
+                            .dlArenasGuardiaA(0.0)
+                            .dlArenasGuardiaB(0.0)
+                            .dlArenasTotalDia(0.0)
+                            .totalArenasGuardiaA(0.0)
+                            .totalArenasGuardiaB(0.0)
+                            .totalArenasDia(0.0)
+                            .build();
+                    dailyReportRepository.save(emptyReport);
+                }
+            }
+
             // 3. Recorrer hoja "Registro aviso SAP" si existe
             int sapCount = 0;
             Sheet sapSheet = workbook.getSheet("Registro aviso SAP");
