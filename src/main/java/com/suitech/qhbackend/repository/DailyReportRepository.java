@@ -16,6 +16,8 @@ public interface DailyReportRepository extends JpaRepository<DailyReport, Long> 
 
     List<DailyReport> findByYearNumberAndMonthNumberOrderByDayNumberAsc(Integer yearNumber, Integer monthNumber);
 
+    List<DailyReport> findByYearNumberOrderByMonthNumberAscDayNumberAsc(Integer yearNumber);
+
     @Query("SELECT DISTINCT d.yearNumber, d.monthNumber FROM DailyReport d ORDER BY d.yearNumber DESC, d.monthNumber DESC")
     List<Object[]> findAvailableMonths();
 

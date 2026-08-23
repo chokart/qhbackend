@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/reports")
@@ -230,6 +231,81 @@ public class ReportController {
         } catch (Exception e) {
             return 0.0;
         }
+    }
+
+    @GetMapping("/annual")
+    public ResponseEntity<?> getAnnualSummary(@RequestParam(name = "year", required = false) Integer year) {
+        if (year == null) {
+            year = LocalDate.now().getYear();
+        }
+
+        List<DailyReport> yearReports = dailyReportRepository.findByYearNumberOrderByMonthNumberAscDayNumberAsc(year);
+
+        Map<Integer, List<DailyReport>> byMonth = yearReports.stream()
+                .collect(Collectors.groupingBy(DailyReport::getMonthNumber));
+
+        List<Map<String, Object>> monthsSummary = new ArrayList<>();
+
+        double grandDpA = 0, grandDpB = 0, grandDpTot = 0;
+        double grandDlA = 0, grandDlB = 0, grandDlTot = 0;
+        double grandTotA = 0, grandTotB = 0, grandTotYear = 0;
+
+        for (int m = 1; m <= 12; m++) {
+            List<DailyReport> mReports = byMonth.getOrDefault(m, Collections.emptyList());
+
+            double dpA = mReports.stream().mapToDouble(d -> d.getDpArenasGuardiaA() != null ? d.getDpArenasGuardiaA() : 0.0).sum();
+            double dpB = mReports.stream().mapToDouble(d -> d.getDpArenasGuardiaB() != null ? d.getDpArenasGuardiaB() : 0.0).sum();
+            double dpTot = mReports.stream().mapToDouble(d -> d.getDpArenasTotalDia() != null ? d.getDpArenasTotalDia() : 0.0).sum();
+
+            double dlA = mReports.stream().mapToDouble(d -> d.getDlArenasGuardiaA() != null ? d.getDlArenasGuardiaA() : 0.0).sum();
+            double dlB = mReports.stream().mapToDouble(d -> d.getDlArenasGuardiaB() != null ? d.getDlArenasGuardiaB() : 0.0).sum();
+            double dlTot = mReports.stream().mapToDouble(d -> d.getDlArenasTotalDia() != null ? d.getDlArenasTotalDia() : 0.0).sum();
+
+            double totA = mReports.stream().mapToDouble(d -> d.getTotalArenasGuardiaA() != null ? d.getTotalArenasGuardiaA() : (dpA + dlA)).sum();
+            double totB = mReports.stream().mapToDouble(d -> d.getTotalArenasGuardiaB() != null ? d.getTotalArenasGuardiaB() : (dpB + dlB)).sum();
+            double totMes = mReports.stream().mapToDouble(d -> d.getTotalArenasDia() != null ? d.getTotalArenasDia() : 0.0).sum();
+
+            grandDpA += dpA;
+            grandDpB += dpB;
+            grandDpTot += dpTot;
+            grandDlA += dlA;
+            grandDlB += dlB;
+            grandDlTot += dlTot;
+            grandTotA += totA;
+            grandTotB += totB;
+            grandTotYear += totMes;
+
+            Map<String, Object> mData = new HashMap<>();
+            mData.put("monthNumber", m);
+            mData.put("hasData", !mReports.isEmpty());
+            mData.put("daysCount", mReports.size());
+            mData.put("dpArenasA", dpA);
+            mData.put("dpArenasB", dpB);
+            mData.put("dpArenasTotal", dpTot);
+            mData.put("dlArenasA", dlA);
+            mData.put("dlArenasB", dlB);
+            mData.put("dlArenasTotal", dlTot);
+            mData.put("totalArenasA", totA);
+            mData.put("totalArenasB", totB);
+            mData.put("totalArenasMes", totMes);
+
+            monthsSummary.add(mData);
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("year", year);
+        response.put("months", monthsSummary);
+        response.put("grandDpA", grandDpA);
+        response.put("grandDpB", grandDpB);
+        response.put("grandDpTotal", grandDpTot);
+        response.put("grandDlA", grandDlA);
+        response.put("grandDlB", grandDlB);
+        response.put("grandDlTotal", grandDlTot);
+        response.put("grandTotalA", grandTotA);
+        response.put("grandTotalB", grandTotB);
+        response.put("grandTotalYear", grandTotYear);
+
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping
