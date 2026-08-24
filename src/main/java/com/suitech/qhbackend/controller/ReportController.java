@@ -21,8 +21,23 @@ import java.util.stream.Collectors;
 public class ReportController {
 
     private final ExcelReportParserService parserService;
+    private final com.suitech.qhbackend.service.PastedReportService pastedReportService;
     private final DailyReportRepository dailyReportRepository;
     private final SapNoticeRepository sapNoticeRepository;
+
+    @PostMapping("/import-pasted")
+    public ResponseEntity<?> importPastedReport(@RequestBody com.suitech.qhbackend.dto.PastedReportRequest request) {
+        try {
+            Map<String, Object> result = pastedReportService.parseAndSavePastedReport(request.getRawText());
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "message", "Error al procesar el texto pegado: " + e.getMessage()
+            ));
+        }
+    }
 
     @PostMapping("/upload")
     public ResponseEntity<?> uploadExcelReport(@RequestParam("file") MultipartFile file) {
