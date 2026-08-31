@@ -13,13 +13,18 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @Slf4j
 @Service
@@ -176,6 +181,61 @@ public class IsoRagService {
                         .score(Math.round(sc.score * 100.0) / 100.0)
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Extrae un archivo ZIP cargado desde la web y lo indexa automáticamente.
+     */
+    @Transactional
+    public synchronized Map<String, Object> processUploadedZip(MultipartFile zipFile) throws IOException {
+        if (zipFile == null || zipFile.isEmpty()) {
+            throw new IllegalArgumentException("El archivo ZIP no puede estar vacío.");
+        }
+
+        File targetDir = new File("uploads/iso_documents");
+        if (!targetDir.exists()) {
+            targetDir.mkdirs();
+        }
+
+        int pdfCount = 0;
+
+        try (InputStream is = zipFile.getInputStream();
+             ZipInputStream zis = new ZipInputStream(is)) {
+
+            ZipEntry entry;
+            byte[] buffer = new byte[8192];
+
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+
+                String name = entry.getName();
+                if (name.toLowerCase().endsWith(".pdf")) {
+                    File outFile = new File(targetDir, new File(name).getName());
+                    try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                        int len;
+                        while ((len = zis.read(buffer)) > 0) {
+                            fos.write(buffer, 0, len);
+                        }
+                    }
+                    pdfCount++;
+                }
+                zis.closeEntry();
+            }
+        }
+
+        String originalPath = this.isoFolderPath;
+        this.isoFolderPath = targetDir.getAbsolutePath();
+        int totalChunks = indexIsoDocuments();
+        this.isoFolderPath = originalPath;
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("message", "Archivo ZIP subido y procesado exitosamente en el servidor.");
+        result.put("pdfExtractedCount", pdfCount);
+        result.put("totalChunksIndexed", totalChunks);
+        return result;
     }
 
     /**

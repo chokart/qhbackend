@@ -7,6 +7,7 @@ import com.suitech.qhbackend.service.IsoRagService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -36,5 +37,18 @@ public class AssistantController {
         result.put("message", "Indexación de documentos ISO 45001 completada exitosamente.");
         result.put("totalChunksIndexed", totalChunks);
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/upload-zip")
+    public ResponseEntity<Map<String, Object>> uploadZip(@RequestParam("file") MultipartFile file) {
+        try {
+            Map<String, Object> result = ragService.processUploadedZip(file);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> errorMap = new HashMap<>();
+            errorMap.put("success", false);
+            errorMap.put("message", "Error procesando archivo ZIP: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorMap);
+        }
     }
 }
