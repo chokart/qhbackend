@@ -19,7 +19,7 @@ public class GeminiLlmService {
     @Value("${gemini.api.key:}")
     private String apiKey;
 
-    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent}")
+    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent}")
     private String apiUrl;
 
     private final RestTemplate restTemplate = new RestTemplate();
@@ -36,7 +36,20 @@ public class GeminiLlmService {
     }
 
     public String getProviderName() {
-        return "Google Gemini (gemini-1.5-flash)";
+        return "Google Gemini (gemini-1.5-flash-latest / gemini-2.0-flash)";
+    }
+
+    private List<String> getCandidateEndpoints() {
+        return Arrays.asList(
+                apiUrl,
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+                "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        );
     }
 
     /**
@@ -74,13 +87,6 @@ public class GeminiLlmService {
             contextBuilder.append("2. Cita explícitamente los códigos de PETS/IPERC o nombres de estándares cuando menciones procedimientos o controles.\n");
             contextBuilder.append("3. Si la información no está presente en las fuentes recuperadas, indícalo claramente.");
 
-            List<String> candidateEndpoints = Arrays.asList(
-                    apiUrl,
-                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
-                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
-            );
-
             Map<String, Object> textPart = new HashMap<>();
             textPart.put("text", contextBuilder.toString());
 
@@ -101,7 +107,7 @@ public class GeminiLlmService {
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-            for (String targetUrl : candidateEndpoints) {
+            for (String targetUrl : getCandidateEndpoints()) {
                 try {
                     String fullUrl = targetUrl.contains("?") ? targetUrl + "&key=" + cleanKey : targetUrl + "?key=" + cleanKey;
                     log.info("Consultando endpoint Gemini API: {}", targetUrl);
@@ -133,7 +139,7 @@ public class GeminiLlmService {
     }
 
     /**
-     * Método de diagnóstico para probar directamente la API Key contra la API de Gemini.
+     * Método de diagnóstico para probar directamente la API Key contra la API de Gemini probando modelos alternativos.
      */
     public Map<String, Object> testGeminiApiConnection() {
         Map<String, Object> result = new HashMap<>();
@@ -151,8 +157,6 @@ public class GeminiLlmService {
                 : "KEY_CORTA";
         result.put("keyPreview", keyPreview);
 
-        String testUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + cleanKey;
-
         Map<String, Object> textPart = Collections.singletonMap("text", "Responde únicamente la palabra: OK");
         Map<String, Object> contentObj = Collections.singletonMap("parts", Collections.singletonList(textPart));
         Map<String, Object> requestBody = Collections.singletonMap("contents", Collections.singletonList(contentObj));
@@ -162,27 +166,40 @@ public class GeminiLlmService {
         headers.set("x-goog-api-key", cleanKey);
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+        List<Map<String, Object>> attempts = new ArrayList<>();
 
-        try {
-            ResponseEntity<String> response = restTemplate.exchange(testUrl, HttpMethod.POST, entity, String.class);
-            result.put("httpStatus", response.getStatusCode().toString());
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                result.put("success", true);
-                result.put("rawResponseBody", response.getBody());
-            } else {
-                result.put("success", false);
-                result.put("rawResponseBody", response.getBody());
+        for (String testUrlBase : getCandidateEndpoints()) {
+            Map<String, Object> attemptLog = new HashMap<>();
+            attemptLog.put("endpoint", testUrlBase);
+            String testUrl = testUrlBase.contains("?") ? testUrlBase + "&key=" + cleanKey : testUrlBase + "?key=" + cleanKey;
+
+            try {
+                ResponseEntity<String> response = restTemplate.exchange(testUrl, HttpMethod.POST, entity, String.class);
+                attemptLog.put("httpStatus", response.getStatusCode().toString());
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    attemptLog.put("success", true);
+                    result.put("success", true);
+                    result.put("workingEndpoint", testUrlBase);
+                    result.put("httpStatus", response.getStatusCode().toString());
+                    result.put("rawResponseBody", response.getBody());
+                    attempts.add(attemptLog);
+                    result.put("attempts", attempts);
+                    return result;
+                }
+            } catch (HttpStatusCodeException httpEx) {
+                attemptLog.put("success", false);
+                attemptLog.put("httpStatus", httpEx.getStatusCode().toString());
+                attemptLog.put("errorResponse", httpEx.getResponseBodyAsString());
+            } catch (Exception e) {
+                attemptLog.put("success", false);
+                attemptLog.put("exceptionMessage", e.getMessage());
             }
-        } catch (HttpStatusCodeException httpEx) {
-            result.put("success", false);
-            result.put("httpStatus", httpEx.getStatusCode().toString());
-            result.put("errorResponse", httpEx.getResponseBodyAsString());
-            log.error("Diagnóstico Gemini API Error HTTP {}: {}", httpEx.getStatusCode(), httpEx.getResponseBodyAsString());
-        } catch (Exception e) {
-            result.put("success", false);
-            result.put("exceptionMessage", e.getMessage());
-            log.error("Diagnóstico Gemini API Excepción: {}", e.getMessage(), e);
+            attempts.add(attemptLog);
         }
+
+        result.put("success", false);
+        result.put("message", "Ninguno de los modelos de Gemini respondió con éxito.");
+        result.put("attempts", attempts);
 
         return result;
     }
