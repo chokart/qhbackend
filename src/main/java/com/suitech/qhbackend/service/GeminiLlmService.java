@@ -67,7 +67,12 @@ public class GeminiLlmService {
             contextBuilder.append("2. Cita explícitamente los códigos de PETS/IPERC o nombres de estándares cuando menciones procedimientos o controles.\n");
             contextBuilder.append("3. Si la información no está presente en las fuentes recuperadas, indícalo claramente.");
 
-            String endpointUrl = apiUrl + "?key=" + apiKey.trim();
+            List<String> candidateEndpoints = Arrays.asList(
+                    apiUrl,
+                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
+            );
 
             Map<String, Object> textPart = new HashMap<>();
             textPart.put("text", contextBuilder.toString());
@@ -87,20 +92,33 @@ public class GeminiLlmService {
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-            ResponseEntity<String> response = restTemplate.exchange(endpointUrl, HttpMethod.POST, entity, String.class);
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                JsonNode root = objectMapper.readTree(response.getBody());
-                JsonNode candidates = root.path("candidates");
-                if (candidates.isArray() && candidates.size() > 0) {
-                    JsonNode textNode = candidates.get(0).path("content").path("parts").get(0).path("text");
-                    if (!textNode.isMissingNode()) {
-                        return textNode.asText();
+            for (String targetUrl : candidateEndpoints) {
+                try {
+                    String fullUrl = targetUrl + "?key=" + apiKey.trim();
+                    log.info("Probando endpoint Gemini API: {}", targetUrl);
+                    
+                    ResponseEntity<String> response = restTemplate.exchange(fullUrl, HttpMethod.POST, entity, String.class);
+
+                    if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                        JsonNode root = objectMapper.readTree(response.getBody());
+                        JsonNode candidates = root.path("candidates");
+                        if (candidates.isArray() && candidates.size() > 0) {
+                            JsonNode textNode = candidates.get(0).path("content").path("parts").get(0).path("text");
+                            if (!textNode.isMissingNode() && !textNode.asText().isEmpty()) {
+                                return textNode.asText();
+                            }
+                        }
                     }
+                } catch (org.springframework.web.client.HttpStatusCodeException httpEx) {
+                    log.warn("Gemini API respondió error HTTP {} en endpoint {}: {}", 
+                            httpEx.getStatusCode(), targetUrl, httpEx.getResponseBodyAsString());
+                } catch (Exception ex) {
+                    log.warn("Fallo al conectar con Gemini endpoint {}: {}", targetUrl, ex.getMessage());
                 }
             }
         } catch (Exception e) {
-            log.error("Error al consultar Gemini LLM API: {}", e.getMessage(), e);
+            log.error("Error general en GeminiLlmService: {}", e.getMessage(), e);
         }
 
         return null;
