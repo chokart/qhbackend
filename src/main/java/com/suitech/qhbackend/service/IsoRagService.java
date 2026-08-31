@@ -23,8 +23,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
 
 @Slf4j
 @Service
@@ -200,12 +200,12 @@ public class IsoRagService {
         int pdfCount = 0;
 
         try (InputStream is = zipFile.getInputStream();
-             ZipInputStream zis = new ZipInputStream(is)) {
+             ZipArchiveInputStream zis = new ZipArchiveInputStream(is, "UTF-8", true, true)) {
 
-            ZipEntry entry;
+            ZipArchiveEntry entry;
             byte[] buffer = new byte[8192];
 
-            while ((entry = zis.getNextEntry()) != null) {
+            while ((entry = zis.getNextZipEntry()) != null) {
                 if (entry.isDirectory()) {
                     continue;
                 }
@@ -221,7 +221,6 @@ public class IsoRagService {
                     }
                     pdfCount++;
                 }
-                zis.closeEntry();
             }
         }
 
