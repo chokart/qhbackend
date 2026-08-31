@@ -277,7 +277,7 @@ public class IsoRagService {
 
         int chunksCreated = 0;
 
-        try (PDDocument document = Loader.loadFile(pdfFile)) {
+        try (PDDocument document = Loader.loadPDF(pdfFile)) {
             PDFTextStripper stripper = new PDFTextStripper();
             int totalPages = document.getNumberOfPages();
 
