@@ -36,19 +36,16 @@ public class GeminiLlmService {
     }
 
     public String getProviderName() {
-        return "Google Gemini (gemini-1.5-flash-latest / gemini-2.0-flash)";
+        return "Google Gemini (gemini-3.6-flash)";
     }
 
     private List<String> getCandidateEndpoints() {
         return Arrays.asList(
                 apiUrl,
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent",
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent",
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-                "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent",
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent",
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent",
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
         );
     }
 
