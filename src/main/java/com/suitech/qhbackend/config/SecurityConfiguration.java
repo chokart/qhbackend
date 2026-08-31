@@ -45,6 +45,7 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/v1/canchas/**").authenticated()
                         .requestMatchers("/api/v1/canchas-capas/**").authenticated()
                         .requestMatchers("/api/v1/areas/**").authenticated()
+                        .requestMatchers("/api/v1/assistant/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
