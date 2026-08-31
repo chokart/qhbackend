@@ -24,7 +24,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
-import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipFile;
+import java.util.Enumeration;
 
 @Slf4j
 @Service
@@ -197,30 +198,39 @@ public class IsoRagService {
             targetDir.mkdirs();
         }
 
+        File tempZip = File.createTempFile("iso_upload_", ".zip");
         int pdfCount = 0;
 
-        try (InputStream is = zipFile.getInputStream();
-             ZipArchiveInputStream zis = new ZipArchiveInputStream(is, "UTF-8", true, true)) {
+        try {
+            zipFile.transferTo(tempZip);
 
-            ZipArchiveEntry entry;
-            byte[] buffer = new byte[8192];
+            try (ZipFile zipFileArchive = new ZipFile(tempZip)) {
+                Enumeration<ZipArchiveEntry> entries = zipFileArchive.getEntries();
+                byte[] buffer = new byte[8192];
 
-            while ((entry = zis.getNextZipEntry()) != null) {
-                if (entry.isDirectory()) {
-                    continue;
-                }
-
-                String name = entry.getName();
-                if (name.toLowerCase().endsWith(".pdf")) {
-                    File outFile = new File(targetDir, new File(name).getName());
-                    try (FileOutputStream fos = new FileOutputStream(outFile)) {
-                        int len;
-                        while ((len = zis.read(buffer)) > 0) {
-                            fos.write(buffer, 0, len);
-                        }
+                while (entries.hasMoreElements()) {
+                    ZipArchiveEntry entry = entries.nextElement();
+                    if (entry.isDirectory()) {
+                        continue;
                     }
-                    pdfCount++;
+
+                    String name = entry.getName();
+                    if (name.toLowerCase().endsWith(".pdf")) {
+                        File outFile = new File(targetDir, new File(name).getName());
+                        try (InputStream is = zipFileArchive.getInputStream(entry);
+                             FileOutputStream fos = new FileOutputStream(outFile)) {
+                            int len;
+                            while ((len = is.read(buffer)) > 0) {
+                                fos.write(buffer, 0, len);
+                            }
+                        }
+                        pdfCount++;
+                    }
                 }
+            }
+        } finally {
+            if (tempZip.exists()) {
+                tempZip.delete();
             }
         }
 
