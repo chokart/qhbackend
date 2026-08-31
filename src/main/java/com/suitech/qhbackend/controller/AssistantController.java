@@ -18,6 +18,7 @@ import java.util.Map;
 public class AssistantController {
 
     private final IsoRagService ragService;
+    private final com.suitech.qhbackend.service.GeminiLlmService geminiLlmService;
 
     @PostMapping("/chat")
     public ResponseEntity<AssistantChatResponse> chat(@RequestBody AssistantChatRequest request) {
@@ -27,6 +28,11 @@ public class AssistantController {
     @GetMapping("/status")
     public ResponseEntity<AssistantStatusResponse> getStatus() {
         return ResponseEntity.ok(ragService.getStatus());
+    }
+
+    @GetMapping("/test-gemini")
+    public ResponseEntity<Map<String, Object>> testGemini() {
+        return ResponseEntity.ok(geminiLlmService.testGeminiApiConnection());
     }
 
     @PostMapping("/index")

@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
@@ -24,8 +25,14 @@ public class GeminiLlmService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    public String getCleanApiKey() {
+        if (apiKey == null) return "";
+        return apiKey.replaceAll("[\"']", "").trim();
+    }
+
     public boolean isLlmConfigured() {
-        return apiKey != null && !apiKey.trim().isEmpty();
+        String clean = getCleanApiKey();
+        return !clean.isEmpty();
     }
 
     public String getProviderName() {
@@ -34,10 +41,10 @@ public class GeminiLlmService {
 
     /**
      * Consulta al LLM Google Gemini enviando la pregunta y el contexto de las fuentes ISO 45001 recuperadas.
-     * Si no hay API Key configurada, NO genera respuestas sintéticas y retorna null.
      */
     public String generateAnswer(String query, List<SourceCitation> sources) {
-        if (!isLlmConfigured()) {
+        String cleanKey = getCleanApiKey();
+        if (cleanKey.isEmpty()) {
             log.info("Consulta RAG recibida pero no hay GEMINI_API_KEY configurada. Servicio LLM no disponible.");
             return null;
         }
@@ -45,7 +52,7 @@ public class GeminiLlmService {
         try {
             StringBuilder contextBuilder = new StringBuilder();
             contextBuilder.append("Eres el Asistente Técnico y de Seguridad en Salud Ocupacional (ISO 45001) para la operación QH Relavera.\n");
-            contextBuilder.append("Responde a la consulta del usuario de forma profesional, clara y precisa, basada ESTRICTAMENTE en la información de los siguientes documentos de la carpeta D:\\ISO 45001:\n\n");
+            contextBuilder.append("Responde a la consulta del usuario de forma profesional, clara y precisa, basada ESTRICTAMENTE en la información de los siguientes documentos de la carpeta ISO 45001:\n\n");
             
             for (int i = 0; i < sources.size(); i++) {
                 SourceCitation src = sources.get(i);
@@ -90,13 +97,14 @@ public class GeminiLlmService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-goog-api-key", cleanKey);
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
             for (String targetUrl : candidateEndpoints) {
                 try {
-                    String fullUrl = targetUrl + "?key=" + apiKey.trim();
-                    log.info("Probando endpoint Gemini API: {}", targetUrl);
+                    String fullUrl = targetUrl.contains("?") ? targetUrl + "&key=" + cleanKey : targetUrl + "?key=" + cleanKey;
+                    log.info("Consultando endpoint Gemini API: {}", targetUrl);
                     
                     ResponseEntity<String> response = restTemplate.exchange(fullUrl, HttpMethod.POST, entity, String.class);
 
@@ -110,8 +118,8 @@ public class GeminiLlmService {
                             }
                         }
                     }
-                } catch (org.springframework.web.client.HttpStatusCodeException httpEx) {
-                    log.warn("Gemini API respondió error HTTP {} en endpoint {}: {}", 
+                } catch (HttpStatusCodeException httpEx) {
+                    log.warn("Gemini API respondió error HTTP {} en {}: {}", 
                             httpEx.getStatusCode(), targetUrl, httpEx.getResponseBodyAsString());
                 } catch (Exception ex) {
                     log.warn("Fallo al conectar con Gemini endpoint {}: {}", targetUrl, ex.getMessage());
@@ -122,5 +130,60 @@ public class GeminiLlmService {
         }
 
         return null;
+    }
+
+    /**
+     * Método de diagnóstico para probar directamente la API Key contra la API de Gemini.
+     */
+    public Map<String, Object> testGeminiApiConnection() {
+        Map<String, Object> result = new HashMap<>();
+        String cleanKey = getCleanApiKey();
+
+        result.put("configured", isLlmConfigured());
+        if (!isLlmConfigured()) {
+            result.put("success", false);
+            result.put("message", "GEMINI_API_KEY no está configurada en las variables de entorno.");
+            return result;
+        }
+
+        String keyPreview = cleanKey.length() > 8 
+                ? cleanKey.substring(0, 4) + "..." + cleanKey.substring(cleanKey.length() - 4) 
+                : "KEY_CORTA";
+        result.put("keyPreview", keyPreview);
+
+        String testUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + cleanKey;
+
+        Map<String, Object> textPart = Collections.singletonMap("text", "Responde únicamente la palabra: OK");
+        Map<String, Object> contentObj = Collections.singletonMap("parts", Collections.singletonList(textPart));
+        Map<String, Object> requestBody = Collections.singletonMap("contents", Collections.singletonList(contentObj));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("x-goog-api-key", cleanKey);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(testUrl, HttpMethod.POST, entity, String.class);
+            result.put("httpStatus", response.getStatusCode().toString());
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                result.put("success", true);
+                result.put("rawResponseBody", response.getBody());
+            } else {
+                result.put("success", false);
+                result.put("rawResponseBody", response.getBody());
+            }
+        } catch (HttpStatusCodeException httpEx) {
+            result.put("success", false);
+            result.put("httpStatus", httpEx.getStatusCode().toString());
+            result.put("errorResponse", httpEx.getResponseBodyAsString());
+            log.error("Diagnóstico Gemini API Error HTTP {}: {}", httpEx.getStatusCode(), httpEx.getResponseBodyAsString());
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("exceptionMessage", e.getMessage());
+            log.error("Diagnóstico Gemini API Excepción: {}", e.getMessage(), e);
+        }
+
+        return result;
     }
 }
