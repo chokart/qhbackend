@@ -70,4 +70,9 @@ public class AssistantController {
             return ResponseEntity.badRequest().body(errorMap);
         }
     }
+
+    @PostMapping("/clear")
+    public ResponseEntity<Map<String, Object>> clearAllData() {
+        return ResponseEntity.ok(ragService.clearAllIsoData());
+    }
 }

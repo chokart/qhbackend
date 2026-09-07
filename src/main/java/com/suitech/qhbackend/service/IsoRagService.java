@@ -279,6 +279,37 @@ public class IsoRagService {
     }
 
     /**
+     * Limpia completamente la base de datos de fragmentos y elimina los archivos subidos.
+     */
+    @Transactional
+    public synchronized Map<String, Object> clearAllIsoData() {
+        long count = chunkRepository.count();
+        chunkRepository.deleteAll();
+
+        File uploadDir = new File("uploads/iso_documents");
+        int deletedFiles = 0;
+        if (uploadDir.exists() && uploadDir.isDirectory()) {
+            File[] files = uploadDir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    if (f.delete()) {
+                        deletedFiles++;
+                    }
+                }
+            }
+        }
+
+        log.info("Base de datos ISO 45001 limpiada. {} chunks eliminados, {} archivos eliminados.", count, deletedFiles);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("message", "Base de datos y archivos de ISO 45001 eliminados completamente.");
+        result.put("chunksDeleted", count);
+        result.put("filesDeleted", deletedFiles);
+        return result;
+    }
+
+    /**
      * Ingesta un archivo JSON de conocimiento preprocesado (iso_knowledge_base.json).
      */
     @Transactional
