@@ -49,10 +49,14 @@ public class GeminiLlmService {
         );
     }
 
-    /**
-     * Consulta al LLM Google Gemini enviando la pregunta y el contexto de las fuentes ISO 45001 recuperadas.
-     */
     public String generateAnswer(String query, List<SourceCitation> sources) {
+        return generateAnswer(query, sources, null);
+    }
+
+    /**
+     * Consulta al LLM Google Gemini enviando la pregunta, el historial de conversación y las fuentes ISO 45001.
+     */
+    public String generateAnswer(String query, List<SourceCitation> sources, List<com.suitech.qhbackend.dto.AssistantChatRequest.HistoryItem> history) {
         String cleanKey = getCleanApiKey();
         if (cleanKey.isEmpty()) {
             log.info("Consulta RAG recibida pero no hay GEMINI_API_KEY configurada. Servicio LLM no disponible.");
@@ -63,6 +67,17 @@ public class GeminiLlmService {
             StringBuilder contextBuilder = new StringBuilder();
             contextBuilder.append("Eres el Asistente Técnico y de Seguridad en Salud Ocupacional (ISO 45001) para la operación QH Relavera.\n");
             contextBuilder.append("Responde a la consulta del usuario de forma profesional, clara y precisa, basada ESTRICTAMENTE en la información de los siguientes documentos de la carpeta ISO 45001:\n\n");
+
+            if (history != null && !history.isEmpty()) {
+                contextBuilder.append("--- HISTORIAL DE CONVERSACIÓN RECIENTE DE ESTA SESIÓN ---\n");
+                for (com.suitech.qhbackend.dto.AssistantChatRequest.HistoryItem item : history) {
+                    if (item.getText() != null && !item.getText().trim().isEmpty()) {
+                        String role = "user".equalsIgnoreCase(item.getSender()) ? "Usuario" : "Asistente";
+                        contextBuilder.append(role).append(": ").append(item.getText().trim()).append("\n");
+                    }
+                }
+                contextBuilder.append("\n");
+            }
             
             for (int i = 0; i < sources.size(); i++) {
                 SourceCitation src = sources.get(i);

@@ -105,8 +105,8 @@ public class IsoRagService {
                     .build();
         }
 
-        // 3. Generar respuesta con Gemini LLM
-        String llmAnswer = geminiLlmService.generateAnswer(userQuery, topSources);
+        // 3. Generar respuesta con Gemini LLM pasando historial de conversación
+        String llmAnswer = geminiLlmService.generateAnswer(userQuery, topSources, request.getHistory());
 
         if (llmAnswer == null || llmAnswer.trim().isEmpty()) {
             return AssistantChatResponse.builder()
