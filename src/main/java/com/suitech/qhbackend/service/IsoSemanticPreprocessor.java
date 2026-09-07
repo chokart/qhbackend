@@ -37,6 +37,8 @@ public class IsoSemanticPreprocessor {
             chunks.addAll(processIpercText(fileName, docCode, pageNumber, cleanText, filePath));
         } else if (category.contains("ESTANDAR")) {
             chunks.addAll(processEstandarText(fileName, docCode, category, pageNumber, cleanText, filePath));
+        } else if ("LEYES".equalsIgnoreCase(category) || category.contains("LEY") || category.contains("NORMATIVA")) {
+            chunks.addAll(processLeyesText(fileName, docCode, category, pageNumber, cleanText, filePath));
         } else {
             chunks.addAll(processGenericText(fileName, docCode, category, pageNumber, cleanText, filePath));
         }
@@ -119,6 +121,20 @@ public class IsoSemanticPreprocessor {
             String enriched = String.format("📋 ESTÁNDAR DE SEGURIDAD [%s - %s]\nDocumento: %s\n%s", 
                     docCode != null ? docCode : "ESTÁNDAR", category, fileName, raw);
             list.add(createChunk(docCode, fileName, category, index++, enriched, pageNumber, filePath));
+        }
+
+        return list;
+    }
+
+    private List<IsoDocumentChunk> processLeyesText(String fileName, String docCode, String category, int pageNumber, String text, String filePath) {
+        List<IsoDocumentChunk> list = new ArrayList<>();
+        List<String> rawChunks = splitTextBySentence(text, 600, 100);
+
+        int index = 1;
+        for (String raw : rawChunks) {
+            String enriched = String.format("⚖️ MARCO LEGAL Y NORMATIVA DE SEGURIDAD MINERA (D.S. 024-2016-EM)\nDocumento: %s\nPágina: %d\nContenido de la Norma:\n%s", 
+                    fileName, pageNumber, raw);
+            list.add(createChunk(docCode != null ? docCode : "D.S. 024-2016-EM", fileName, "LEYES", index++, enriched, pageNumber, filePath));
         }
 
         return list;

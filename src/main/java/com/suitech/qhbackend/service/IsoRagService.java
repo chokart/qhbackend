@@ -394,6 +394,7 @@ public class IsoRagService {
         String path = pdfFile.getAbsolutePath().toUpperCase();
         if (path.contains("1. PETS")) return "PETS";
         if (path.contains("2. IPERC LB")) return "IPERC";
+        if (path.contains("5. LEYES") || path.contains("LEYES") || path.contains("NORMATIVA")) return "LEYES";
         if (path.contains("ESTÁNDARES\\1. OPERATIVOS") || path.contains("ESTANDARES\\1. OPERATIVOS")) return "ESTANDAR_OPERATIVO";
         if (path.contains("ESTÁNDARES\\2. SEGURIDAD") || path.contains("ESTANDARES\\2. SEGURIDAD")) return "ESTANDAR_SEGURIDAD";
         if (path.contains("MAPA DE PROCESOS")) return "MAPA_PROCESOS";
