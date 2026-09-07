@@ -101,9 +101,10 @@ public class GeminiLlmService {
 
             contextBuilder.append("PREGUNTA DEL USUARIO: ").append(query).append("\n\n");
             contextBuilder.append("INSTRUCCIONES:\n");
-            contextBuilder.append("1. Responde de forma estructurada usando formato Markdown (títulos, viñetas, negritas).\n");
-            contextBuilder.append("2. Cita explícitamente los códigos de PETS/IPERC o nombres de estándares cuando menciones procedimientos o controles.\n");
-            contextBuilder.append("3. Si la información no está presente en las fuentes recuperadas, indícalo claramente.");
+            contextBuilder.append("1. Responde de forma completa, estructurada y detallada usando formato Markdown (títulos, listas numeradas, viñetas, negritas).\n");
+            contextBuilder.append("2. Detalla siempre los Pasos de Ejecución completos, los EPPs obligatorios, las Herramientas y las Medidas de Control descritas en las fuentes.\n");
+            contextBuilder.append("3. Cita explícitamente los códigos de PETS/IPERC o nombres de estándares cuando menciones procedimientos o controles.\n");
+            contextBuilder.append("4. No trunques ni resumas en exceso la respuesta; proporciona la explicación técnica completa.");
 
             Map<String, Object> textPart = new HashMap<>();
             textPart.put("text", contextBuilder.toString());
@@ -116,7 +117,7 @@ public class GeminiLlmService {
 
             Map<String, Object> generationConfig = new HashMap<>();
             generationConfig.put("temperature", 0.2);
-            generationConfig.put("maxOutputTokens", 1500);
+            generationConfig.put("maxOutputTokens", 4000);
             requestBody.put("generationConfig", generationConfig);
 
             HttpHeaders headers = new HttpHeaders();
@@ -136,9 +137,18 @@ public class GeminiLlmService {
                         JsonNode root = objectMapper.readTree(response.getBody());
                         JsonNode candidates = root.path("candidates");
                         if (candidates.isArray() && candidates.size() > 0) {
-                            JsonNode textNode = candidates.get(0).path("content").path("parts").get(0).path("text");
-                            if (!textNode.isMissingNode() && !textNode.asText().isEmpty()) {
-                                return textNode.asText();
+                            JsonNode parts = candidates.get(0).path("content").path("parts");
+                            if (parts.isArray()) {
+                                StringBuilder fullText = new StringBuilder();
+                                for (JsonNode part : parts) {
+                                    JsonNode textNode = part.path("text");
+                                    if (!textNode.isMissingNode() && textNode.isTextual()) {
+                                        fullText.append(textNode.asText());
+                                    }
+                                }
+                                if (fullText.length() > 0) {
+                                    return fullText.toString();
+                                }
                             }
                         }
                     }
