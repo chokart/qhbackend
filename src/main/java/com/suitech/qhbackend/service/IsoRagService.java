@@ -38,6 +38,7 @@ public class IsoRagService {
     private final IsoDocumentChunkRepository chunkRepository;
     private final EmbeddingService embeddingService;
     private final GeminiLlmService geminiLlmService;
+    private final IsoSemanticPreprocessor semanticPreprocessor;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final Pattern PETS_PATTERN = Pattern.compile("PETS[\\.\\-\\s]*(\\d{3})", Pattern.CASE_INSENSITIVE);
@@ -61,20 +62,18 @@ public class IsoRagService {
                     .build();
         }
 
-        // Si la BD no está indexada aún, intentamos indexación básica rápida
         if (chunkRepository.count() == 0) {
             log.info("Base de datos de chunks vacía. Iniciando indexación inicial de D:\\ISO 45001...");
             indexIsoDocuments();
         }
 
-        // 1. Recuperar los fragmentos más relevantes de la BD
-        List<SourceCitation> topSources = retrieveTopChunks(userQuery, categoryFilter, 6);
+        // 1. Recuperar los 8 fragmentos más relevantes de la BD
+        List<SourceCitation> topSources = retrieveTopChunks(userQuery, categoryFilter, 8);
 
         // 2. Verificar estado del LLM Gemini
         boolean isLlmConfigured = geminiLlmService.isLlmConfigured();
 
         if (!isLlmConfigured) {
-            // Requisito estricto: Informar claramente que el servicio de generación NO está disponible
             String statusMsg = "Servicio de generación LLM no disponible (API Key de Gemini no configurada en el servidor).";
             
             StringBuilder defaultAnswer = new StringBuilder();
@@ -279,10 +278,45 @@ public class IsoRagService {
         return totalChunksIndexed;
     }
 
+    /**
+     * Ingesta un archivo JSON de conocimiento preprocesado (iso_knowledge_base.json).
+     */
+    @Transactional
+    public synchronized Map<String, Object> processUploadedJson(MultipartFile jsonFile) throws IOException {
+        if (jsonFile == null || jsonFile.isEmpty()) {
+            throw new IllegalArgumentException("El archivo JSON no puede estar vacío.");
+        }
+
+        List<IsoDocumentChunk> items = objectMapper.readValue(
+                jsonFile.getInputStream(),
+                new TypeReference<List<IsoDocumentChunk>>() {}
+        );
+
+        if (items == null || items.isEmpty()) {
+            throw new IllegalArgumentException("El archivo JSON no contiene elementos válidos.");
+        }
+
+        log.info("Iniciando carga de base de conocimiento preprocesada con {} elementos.", items.size());
+        chunkRepository.deleteAll();
+
+        int savedCount = 0;
+        for (IsoDocumentChunk item : items) {
+            float[] vector = embeddingService.getEmbedding(item.getContent());
+            item.setEmbeddingJson(objectMapper.writeValueAsString(vector));
+            chunkRepository.save(item);
+            savedCount++;
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("message", "Base de conocimiento estructurada JSON cargada exitosamente.");
+        result.put("totalChunksIndexed", savedCount);
+        return result;
+    }
+
     private int processSinglePdf(File pdfFile) throws IOException {
         String fileName = pdfFile.getName();
         String category = determineCategory(pdfFile);
-        String docCode = extractDocumentCode(fileName);
 
         int chunksCreated = 0;
 
@@ -297,24 +331,14 @@ public class IsoRagService {
 
                 if (pageText == null || pageText.trim().isEmpty()) continue;
 
-                List<String> chunks = splitTextIntoChunks(pageText.trim(), 800, 100);
-                for (int idx = 0; idx < chunks.size(); idx++) {
-                    String chunkContent = chunks.get(idx);
-                    float[] vector = embeddingService.getEmbedding(chunkContent);
-                    String embeddingJson = objectMapper.writeValueAsString(vector);
+                List<IsoDocumentChunk> semanticChunks = semanticPreprocessor.preprocessDocument(
+                        fileName, category, page, pageText, pdfFile.getAbsolutePath()
+                );
 
-                    IsoDocumentChunk entity = IsoDocumentChunk.builder()
-                            .documentCode(docCode)
-                            .documentName(fileName)
-                            .category(category)
-                            .chunkIndex(idx + 1)
-                            .content(chunkContent)
-                            .embeddingJson(embeddingJson)
-                            .pageNumber(page)
-                            .filePath(pdfFile.getAbsolutePath())
-                            .build();
-
-                    chunkRepository.save(entity);
+                for (IsoDocumentChunk chunk : semanticChunks) {
+                    float[] vector = embeddingService.getEmbedding(chunk.getContent());
+                    chunk.setEmbeddingJson(objectMapper.writeValueAsString(vector));
+                    chunkRepository.save(chunk);
                     chunksCreated++;
                 }
             }

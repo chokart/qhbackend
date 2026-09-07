@@ -57,4 +57,17 @@ public class AssistantController {
             return ResponseEntity.badRequest().body(errorMap);
         }
     }
+
+    @PostMapping("/upload-json")
+    public ResponseEntity<Map<String, Object>> uploadJson(@RequestParam("file") MultipartFile file) {
+        try {
+            Map<String, Object> result = ragService.processUploadedJson(file);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> errorMap = new HashMap<>();
+            errorMap.put("success", false);
+            errorMap.put("message", "Error procesando archivo JSON: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorMap);
+        }
+    }
 }
