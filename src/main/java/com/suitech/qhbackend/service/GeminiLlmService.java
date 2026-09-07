@@ -22,8 +22,15 @@ public class GeminiLlmService {
     @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent}")
     private String apiUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public GeminiLlmService() {
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10000);
+        factory.setReadTimeout(60000);
+        this.restTemplate = new RestTemplate(factory);
+    }
 
     public String getCleanApiKey() {
         if (apiKey == null) return "";
@@ -41,11 +48,10 @@ public class GeminiLlmService {
 
     private List<String> getCandidateEndpoints() {
         return Arrays.asList(
-                apiUrl,
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+                apiUrl,
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent",
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
         );
     }
 
