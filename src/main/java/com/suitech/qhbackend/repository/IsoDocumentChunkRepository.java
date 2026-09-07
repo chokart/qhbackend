@@ -21,4 +21,7 @@ public interface IsoDocumentChunkRepository extends JpaRepository<IsoDocumentChu
 
     @Query("SELECT c FROM IsoDocumentChunk c WHERE (:category IS NULL OR c.category = :category)")
     List<IsoDocumentChunk> findAllWithCategoryFilter(@Param("category") String category);
+
+    @Query("SELECT DISTINCT c.documentName, c.category, c.documentCode FROM IsoDocumentChunk c ORDER BY c.category, c.documentName")
+    List<Object[]> findDistinctDocumentSummaries();
 }

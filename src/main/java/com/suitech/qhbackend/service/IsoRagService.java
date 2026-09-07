@@ -67,6 +67,10 @@ public class IsoRagService {
             indexIsoDocuments();
         }
 
+        if (isInventoryQuery(userQuery)) {
+            return handleInventoryQuery(startTime);
+        }
+
         // 1. Recuperar los 8 fragmentos más relevantes de la BD
         List<SourceCitation> topSources = retrieveTopChunks(userQuery, categoryFilter, 8);
 
@@ -464,5 +468,101 @@ public class IsoRagService {
         IsoDocumentChunk chunk;
         double score;
         ScoredChunk(IsoDocumentChunk c, double s) { this.chunk = c; this.score = s; }
+    }
+
+    private boolean isInventoryQuery(String query) {
+        if (query == null) return false;
+        String q = query.toLowerCase();
+        return q.contains("qué documento") || q.contains("que documento") ||
+               q.contains("qué pets") || q.contains("que pets") ||
+               q.contains("cuántos documento") || q.contains("cuantos documento") ||
+               q.contains("lista de documento") || q.contains("documentos subidos") ||
+               q.contains("documentos cargados") || q.contains("qué archivos") ||
+               q.contains("que archivos") || q.contains("inventario");
+    }
+
+    private AssistantChatResponse handleInventoryQuery(long startTime) {
+        List<Object[]> summaries = chunkRepository.findDistinctDocumentSummaries();
+        long totalChunks = chunkRepository.count();
+
+        if (summaries == null || summaries.isEmpty()) {
+            return AssistantChatResponse.builder()
+                    .answer("📂 **Estado de la Base de Datos:**\n\nActualmente no hay documentos cargados en el servidor. Puedes subir tus archivos utilizando el botón **`📦 Subir PDFs (.zip)`** o **`📄 Subir Base Preprocesada (.json)`**.")
+                    .llmAvailable(geminiLlmService.isLlmConfigured())
+                    .statusMessage("Base de datos vacía.")
+                    .sources(Collections.emptyList())
+                    .executionTimeMs(System.currentTimeMillis() - startTime)
+                    .build();
+        }
+
+        Map<String, List<String>> byCategory = new LinkedHashMap<>();
+        byCategory.put("PETS", new ArrayList<>());
+        byCategory.put("IPERC", new ArrayList<>());
+        byCategory.put("ESTÁNDARES", new ArrayList<>());
+        byCategory.put("LEYES", new ArrayList<>());
+        byCategory.put("OTROS", new ArrayList<>());
+
+        for (Object[] row : summaries) {
+            String docName = (String) row[0];
+            String category = (String) row[1];
+            String docCode = (String) row[2];
+
+            String display = docCode != null ? String.format("**%s** - %s", docCode, docName) : String.format("**%s**", docName);
+
+            if ("PETS".equalsIgnoreCase(category)) {
+                byCategory.get("PETS").add(display);
+            } else if ("IPERC".equalsIgnoreCase(category)) {
+                byCategory.get("IPERC").add(display);
+            } else if (category != null && category.contains("ESTANDAR")) {
+                byCategory.get("ESTÁNDARES").add(display);
+            } else if ("LEYES".equalsIgnoreCase(category)) {
+                byCategory.get("LEYES").add(display);
+            } else {
+                byCategory.get("OTROS").add(display);
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("📚 **Inventario de Documentos Indexados (%d documentos en %d fragmentos semánticos):**\n\n", summaries.size(), totalChunks));
+
+        if (!byCategory.get("PETS").isEmpty()) {
+            sb.append(String.format("📋 **PETS (Procedimientos Escritos - %d docs):**\n", byCategory.get("PETS").size()));
+            byCategory.get("PETS").stream().limit(15).forEach(d -> sb.append("- ").append(d).append("\n"));
+            if (byCategory.get("PETS").size() > 15) sb.append(String.format("  *... y %d PETS más.*\n", byCategory.get("PETS").size() - 15));
+            sb.append("\n");
+        }
+
+        if (!byCategory.get("IPERC").isEmpty()) {
+            sb.append(String.format("🛡️ **IPERC Línea Base (%d docs):**\n", byCategory.get("IPERC").size()));
+            byCategory.get("IPERC").stream().limit(15).forEach(d -> sb.append("- ").append(d).append("\n"));
+            if (byCategory.get("IPERC").size() > 15) sb.append(String.format("  *... y %d IPERCs más.*\n", byCategory.get("IPERC").size() - 15));
+            sb.append("\n");
+        }
+
+        if (!byCategory.get("ESTÁNDARES").isEmpty()) {
+            sb.append(String.format("🦺 **Estándares Operativos y de Seguridad (%d docs):**\n", byCategory.get("ESTÁNDARES").size()));
+            byCategory.get("ESTÁNDARES").forEach(d -> sb.append("- ").append(d).append("\n"));
+            sb.append("\n");
+        }
+
+        if (!byCategory.get("LEYES").isEmpty()) {
+            sb.append(String.format("⚖️ **Marco Legal y Normativa (%d docs):**\n", byCategory.get("LEYES").size()));
+            byCategory.get("LEYES").forEach(d -> sb.append("- ").append(d).append("\n"));
+            sb.append("\n");
+        }
+
+        if (!byCategory.get("OTROS").isEmpty()) {
+            sb.append(String.format("📄 **Otros Documentos (%d docs):**\n", byCategory.get("OTROS").size()));
+            byCategory.get("OTROS").forEach(d -> sb.append("- ").append(d).append("\n"));
+            sb.append("\n");
+        }
+
+        return AssistantChatResponse.builder()
+                .answer(sb.toString())
+                .llmAvailable(true)
+                .statusMessage("Inventario de documentos generado exitosamente.")
+                .sources(Collections.emptyList())
+                .executionTimeMs(System.currentTimeMillis() - startTime)
+                .build();
     }
 }
