@@ -42,6 +42,8 @@ public class OperatorController {
         operator.setCode(request.getCode() != null ? request.getCode().trim() : null);
         operator.setName(request.getName().trim());
         operator.setRole(request.getRole() != null && !request.getRole().trim().isEmpty() ? request.getRole().trim() : "OPERADOR");
+        operator.setEquipment(request.getEquipment() != null ? request.getEquipment().trim() : null);
+        operator.setActivity(request.getActivity() != null ? request.getActivity().trim() : null);
 
         if (request.getGroupId() != null && request.getGroupId() > 0) {
             Group group = groupRepository.findById(request.getGroupId())
@@ -92,6 +94,24 @@ public class OperatorController {
         return ResponseEntity.ok(updatedOperator);
     }
 
+    @PutMapping("/{id}/details")
+    public ResponseEntity<Operator> updateOperatorDetails(@PathVariable Integer id, @RequestBody ChangeDetailsRequest request) {
+        Operator operator = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Operador no encontrado con ID: " + id));
+
+        if (request.getRole() != null) {
+            operator.setRole(request.getRole().trim());
+        }
+        if (request.getEquipment() != null) {
+            operator.setEquipment(request.getEquipment().trim());
+        }
+        if (request.getActivity() != null) {
+            operator.setActivity(request.getActivity().trim());
+        }
+        Operator updatedOperator = repository.save(operator);
+        return ResponseEntity.ok(updatedOperator);
+    }
+
     @PutMapping("/{id}/only-day")
     public ResponseEntity<Operator> updateOperatorOnlyDay(@PathVariable Integer id, @RequestBody ChangeOnlyDayRequest request) {
         Operator operator = repository.findById(id)
@@ -107,6 +127,8 @@ public class OperatorController {
         private String code;
         private String name;
         private String role;
+        private String equipment;
+        private String activity;
         private Integer groupId;
         private Boolean onlyDayShift;
     }
@@ -119,6 +141,13 @@ public class OperatorController {
     @Data
     public static class ChangeRoleRequest {
         private String role;
+    }
+
+    @Data
+    public static class ChangeDetailsRequest {
+        private String role;
+        private String equipment;
+        private String activity;
     }
 
     @Data

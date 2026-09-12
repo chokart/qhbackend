@@ -125,6 +125,8 @@ public class ShiftController {
             data.setCode(op.getCode());
             data.setName(op.getName());
             data.setRole(op.getRole() != null ? op.getRole() : "OPERADOR");
+            data.setEquipment(op.getEquipment());
+            data.setActivity(op.getActivity());
             data.setOnlyDayShift(op.getOnlyDayShift() != null ? op.getOnlyDayShift() : false);
             data.setGroupId(group != null ? group.getId() : null);
             data.setGroupName(group != null ? group.getName() : "Sin Guardia");
@@ -259,6 +261,8 @@ public class ShiftController {
             data.setCode(op.getCode());
             data.setName(op.getName());
             data.setRole(op.getRole() != null ? op.getRole() : "OPERADOR");
+            data.setEquipment(op.getEquipment());
+            data.setActivity(op.getActivity());
             data.setOnlyDayShift(op.getOnlyDayShift() != null ? op.getOnlyDayShift() : false);
             data.setGroupId(group != null ? group.getId() : null);
             data.setGroupName(group != null ? group.getName() : "Sin Guardia");
@@ -326,6 +330,8 @@ public class ShiftController {
         private String code;
         private String name;
         private String role;
+        private String equipment;
+        private String activity;
         private Boolean onlyDayShift;
         private Integer groupId;
         private String groupName;
@@ -358,6 +364,8 @@ public class ShiftController {
         private String code;
         private String name;
         private String role;
+        private String equipment;
+        private String activity;
         private Boolean onlyDayShift;
         private Integer groupId;
         private String groupName;

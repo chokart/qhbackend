@@ -25,6 +25,10 @@ public class Operator {
 
     private String role;
 
+    private String equipment;
+
+    private String activity;
+
     @ManyToOne
     @JoinColumn(name = "group_id")
     private Group group;
