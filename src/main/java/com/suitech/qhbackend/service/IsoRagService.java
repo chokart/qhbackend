@@ -39,13 +39,14 @@ public class IsoRagService {
     private final EmbeddingService embeddingService;
     private final GeminiLlmService geminiLlmService;
     private final IsoSemanticPreprocessor semanticPreprocessor;
+    private final QueryAnalyzerService queryAnalyzerService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final Pattern PETS_PATTERN = Pattern.compile("PETS[\\.\\-\\s]*(\\d{3})", Pattern.CASE_INSENSITIVE);
     private static final Pattern IPERC_PATTERN = Pattern.compile("IPERC[\\.\\-\\s]*LBASE[\\.\\-\\s]*(\\d{3})", Pattern.CASE_INSENSITIVE);
 
     /**
-     * Procesa la consulta del usuario mediante el flujo RAG.
+     * Procesa la consulta del usuario mediante el flujo RAG V2 (Query Analysis + 2-Stage Search & Reranking).
      */
     public AssistantChatResponse processChat(AssistantChatRequest request) {
         long startTime = System.currentTimeMillis();
@@ -67,14 +68,17 @@ public class IsoRagService {
             indexIsoDocuments();
         }
 
-        if (isInventoryQuery(userQuery)) {
+        // 1. Analizar intención de la consulta con QueryAnalyzer
+        QueryAnalyzerService.QueryAnalysis analysis = queryAnalyzerService.analyzeQuery(userQuery);
+
+        if (analysis.isInventoryQuery() || isInventoryQuery(userQuery)) {
             return handleInventoryQuery(startTime);
         }
 
-        // 1. Recuperar los 8 fragmentos más relevantes de la BD
-        List<SourceCitation> topSources = retrieveTopChunks(userQuery, categoryFilter, 8);
+        // 2. Recuperar y Reranquear los fragmentos más relevantes de la BD (2 Etapas)
+        List<SourceCitation> topSources = retrieveTopChunksV2(userQuery, categoryFilter, analysis, 8);
 
-        // 2. Verificar estado del LLM Gemini
+        // 3. Verificar estado del LLM Gemini
         boolean isLlmConfigured = geminiLlmService.isLlmConfigured();
 
         if (!isLlmConfigured) {
@@ -85,12 +89,14 @@ public class IsoRagService {
             defaultAnswer.append("Para obtener respuestas redactadas por inteligencia artificial, configure la variable `GEMINI_API_KEY`.\n\n");
             
             if (!topSources.isEmpty()) {
-                defaultAnswer.append("📂 **Documentos ISO 45001 relevantes encontrados en la búsqueda:**\n");
+                defaultAnswer.append("📂 **Documentos ISO 45001 relevantes encontrados (Búsqueda Híbrida RAG V2):**\n");
                 for (SourceCitation src : topSources) {
-                    defaultAnswer.append(String.format("- **%s** (%s) - *%s*\n", 
+                    defaultAnswer.append(String.format("- **%s** (%s - Rev. %s) - *%s* [Sec. %s]\n", 
                             src.getDocumentName(), 
                             src.getCategory(), 
-                            src.getDocumentCode() != null ? src.getDocumentCode() : "Doc ISO"));
+                            src.getRevision() != null ? src.getRevision() : "01",
+                            src.getDocumentCode() != null ? src.getDocumentCode() : "Doc ISO",
+                            src.getSection() != null ? src.getSection() : "General"));
                 }
             } else {
                 defaultAnswer.append("No se encontraron coincidencias directas en la base de conocimientos.");
@@ -105,7 +111,7 @@ public class IsoRagService {
                     .build();
         }
 
-        // 3. Generar respuesta con Gemini LLM pasando historial de conversación
+        // 4. Generar respuesta con Gemini LLM usando Prompt Estricto SST
         String llmAnswer = geminiLlmService.generateAnswer(userQuery, topSources, request.getHistory());
 
         if (llmAnswer == null || llmAnswer.trim().isEmpty()) {
@@ -121,20 +127,33 @@ public class IsoRagService {
         return AssistantChatResponse.builder()
                 .answer(llmAnswer)
                 .llmAvailable(true)
-                .statusMessage("Respuesta generada exitosamente con contexto ISO 45001.")
+                .statusMessage("Respuesta generada exitosamente con RAG V2 e Intención: " + analysis.getIntentLabel())
                 .sources(topSources)
                 .executionTimeMs(System.currentTimeMillis() - startTime)
                 .build();
     }
 
     /**
-     * Recupera los K fragmentos más similares vectorialmente o por palabras clave.
+     * Recuperación en 2 Etapas + Reranking Híbrido RAG V2.
+     * Etapa 1: Filtra 25-30 candidatos activos de la BD.
+     * Etapa 2: Aplica scoring combinado (Vector 50% + Intención 25% + Keywords 25%).
      */
     public List<SourceCitation> retrieveTopChunks(String query, String categoryFilter, int limit) {
+        QueryAnalyzerService.QueryAnalysis analysis = queryAnalyzerService.analyzeQuery(query);
+        return retrieveTopChunksV2(query, categoryFilter, analysis, limit);
+    }
+
+    public List<SourceCitation> retrieveTopChunksV2(String query, String categoryFilter, QueryAnalyzerService.QueryAnalysis analysis, int limit) {
         List<IsoDocumentChunk> candidateChunks;
+
+        // Etapa 1: Recuperación de candidatos (25 a 30 elementos activos)
         if (categoryFilter != null && !categoryFilter.trim().isEmpty() && !"ALL".equalsIgnoreCase(categoryFilter)) {
-            candidateChunks = chunkRepository.findByCategory(categoryFilter.trim().toUpperCase());
+            candidateChunks = chunkRepository.findActiveByCategory(categoryFilter.trim().toUpperCase());
         } else {
+            candidateChunks = chunkRepository.findAllActive();
+        }
+
+        if (candidateChunks.isEmpty()) {
             candidateChunks = chunkRepository.findAll();
         }
 
@@ -143,10 +162,12 @@ public class IsoRagService {
         }
 
         float[] queryVector = embeddingService.getEmbedding(query);
-        String[] queryKeywords = query.toLowerCase().replaceAll("[^a-z0-9áéíóúñ]", " ").split("\\s+");
+        List<String> keywords = analysis.getKeywords() != null ? analysis.getKeywords() : Collections.emptyList();
+        List<String> prefCategories = analysis.getPreferredCategories() != null ? analysis.getPreferredCategories() : Collections.emptyList();
 
         List<ScoredChunk> scoredList = new ArrayList<>();
 
+        // Etapa 2: Reranking Híbrido
         for (IsoDocumentChunk chunk : candidateChunks) {
             double vectorSim = 0.0;
             if (chunk.getEmbeddingJson() != null) {
@@ -156,16 +177,35 @@ public class IsoRagService {
                 } catch (Exception ignored) {}
             }
 
-            // Keyword match boost
-            double keywordScore = 0.0;
-            String textLower = chunk.getContent().toLowerCase();
-            for (String kw : queryKeywords) {
-                if (kw.length() > 3 && textLower.contains(kw)) {
-                    keywordScore += 0.15;
+            // Boost por coincidencia de Intención
+            double intentBoost = 0.0;
+            String chunkCat = chunk.getCategory() != null ? chunk.getCategory().toUpperCase() : "";
+            String chunkDocType = chunk.getDocumentType() != null ? chunk.getDocumentType().toUpperCase() : "";
+
+            for (String prefCat : prefCategories) {
+                String prefUpper = prefCat.toUpperCase();
+                if (chunkCat.contains(prefUpper) || chunkDocType.contains(prefUpper)) {
+                    intentBoost = 0.25;
+                    break;
                 }
             }
 
-            double totalScore = (vectorSim * 0.7) + Math.min(keywordScore, 0.3);
+            // Keyword density score
+            double keywordScore = 0.0;
+            String textLower = chunk.getContent().toLowerCase();
+            int kwMatches = 0;
+            for (String kw : keywords) {
+                if (kw.length() > 2 && textLower.contains(kw)) {
+                    kwMatches++;
+                }
+            }
+
+            if (!keywords.isEmpty()) {
+                keywordScore = Math.min(0.25, (double) kwMatches / keywords.size() * 0.25);
+            }
+
+            // Score Total Reranqueado
+            double totalScore = (vectorSim * 0.50) + intentBoost + keywordScore;
 
             if (totalScore > 0.05 || candidateChunks.size() < 10) {
                 scoredList.add(new ScoredChunk(chunk, totalScore));
@@ -180,9 +220,16 @@ public class IsoRagService {
                         .documentCode(sc.chunk.getDocumentCode())
                         .documentName(sc.chunk.getDocumentName())
                         .category(sc.chunk.getCategory())
+                        .documentType(sc.chunk.getDocumentType() != null ? sc.chunk.getDocumentType() : sc.chunk.getCategory())
+                        .revision(sc.chunk.getRevision() != null ? sc.chunk.getRevision() : "01")
+                        .area(sc.chunk.getArea() != null ? sc.chunk.getArea() : "Operaciones QH")
+                        .section(sc.chunk.getSection() != null ? sc.chunk.getSection() : "General")
+                        .sectionTitle(sc.chunk.getSectionTitle() != null ? sc.chunk.getSectionTitle() : "Especificación Técnica")
+                        .status(sc.chunk.getStatus() != null ? sc.chunk.getStatus() : "ACTIVO")
                         .pageNumber(sc.chunk.getPageNumber())
                         .excerpt(truncateExcerpt(sc.chunk.getContent(), 400))
                         .score(Math.round(sc.score * 100.0) / 100.0)
+                        .intentDetected(analysis.getIntentLabel())
                         .build())
                 .collect(Collectors.toList());
     }

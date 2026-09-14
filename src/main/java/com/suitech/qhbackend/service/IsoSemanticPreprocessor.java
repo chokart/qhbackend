@@ -164,16 +164,60 @@ public class IsoSemanticPreprocessor {
                 docCode != null ? docCode : "IPERC", fileName, content);
     }
 
+    private static final Pattern REVISION_PATTERN = Pattern.compile("(?:REV|REVISIÓ|REVISION|VERSIÓ|VERSION|REV\\.)[\\s\\.:]*([0-9]{2,3}|[A-Z0-9]+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SECTION_PATTERN = Pattern.compile("(?:^|\\n)(?:§|SECCIÓ|SECCION|ITEM|CAPÍTULO|CAPITULO|\\b(\\d+\\.\\d+(?:\\.\\d+)?))\\s*[:\\-]?\\s*([^\\n]{3,60})", Pattern.CASE_INSENSITIVE);
+
     private IsoDocumentChunk createChunk(String docCode, String fileName, String category, int chunkIdx, String content, int page, String path) {
+        String revision = extractRevision(content, fileName);
+        String section = extractSectionNumber(content);
+        String sectionTitle = extractSectionTitle(content);
+        String docType = category != null ? category.toUpperCase() : "GENERAL";
+        if (docType.contains("ESTANDAR")) docType = "ESTANDAR";
+
         return IsoDocumentChunk.builder()
                 .documentCode(docCode)
                 .documentName(fileName)
                 .category(category)
+                .documentType(docType)
+                .revision(revision)
+                .area("Operaciones QH")
+                .section(section)
+                .sectionTitle(sectionTitle)
+                .status("ACTIVO")
                 .chunkIndex(chunkIdx)
                 .content(content)
                 .pageNumber(page)
                 .filePath(path)
                 .build();
+    }
+
+    private String extractRevision(String text, String fileName) {
+        Matcher mText = REVISION_PATTERN.matcher(text);
+        if (mText.find()) return mText.group(1).trim();
+
+        Matcher mFile = REVISION_PATTERN.matcher(fileName);
+        if (mFile.find()) return mFile.group(1).trim();
+
+        return "01";
+    }
+
+    private String extractSectionNumber(String text) {
+        Matcher m = SECTION_PATTERN.matcher(text);
+        if (m.find()) {
+            if (m.group(1) != null) return m.group(1).trim();
+            return "§ Sec";
+        }
+        return "General";
+    }
+
+    private String extractSectionTitle(String text) {
+        Matcher m = SECTION_PATTERN.matcher(text);
+        if (m.find() && m.groupCount() >= 2 && m.group(2) != null) {
+            String title = m.group(2).trim();
+            if (title.length() > 60) title = title.substring(0, 60);
+            return title;
+        }
+        return "Disposiciones Generales";
     }
 
     private String cleanRawText(String text) {

@@ -40,6 +40,24 @@ public class IsoDocumentChunk {
     @Column(name = "page_number")
     private Integer pageNumber;
 
+    @Column(name = "document_type", length = 50)
+    private String documentType;
+
+    @Column(name = "revision", length = 20)
+    private String revision;
+
+    @Column(name = "area", length = 100)
+    private String area;
+
+    @Column(name = "section", length = 50)
+    private String section;
+
+    @Column(name = "section_title", length = 255)
+    private String sectionTitle;
+
+    @Column(name = "status", length = 20)
+    private String status;
+
     @Column(name = "file_path", length = 500)
     private String filePath;
 
@@ -50,6 +68,9 @@ public class IsoDocumentChunk {
     public void prePersist() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (status == null || status.trim().isEmpty()) {
+            status = "ACTIVO";
         }
     }
 }

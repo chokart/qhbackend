@@ -19,9 +19,15 @@ public interface IsoDocumentChunkRepository extends JpaRepository<IsoDocumentChu
 
     void deleteByDocumentName(String documentName);
 
-    @Query("SELECT c FROM IsoDocumentChunk c WHERE (:category IS NULL OR c.category = :category)")
+    @Query("SELECT c FROM IsoDocumentChunk c WHERE (c.status IS NULL OR c.status = 'ACTIVO') AND (:category IS NULL OR c.category = :category)")
     List<IsoDocumentChunk> findAllWithCategoryFilter(@Param("category") String category);
 
-    @Query("SELECT DISTINCT c.documentName, c.category, c.documentCode FROM IsoDocumentChunk c ORDER BY c.category, c.documentName")
+    @Query("SELECT c FROM IsoDocumentChunk c WHERE (c.status IS NULL OR c.status = 'ACTIVO')")
+    List<IsoDocumentChunk> findAllActive();
+
+    @Query("SELECT c FROM IsoDocumentChunk c WHERE (c.status IS NULL OR c.status = 'ACTIVO') AND c.category = :category")
+    List<IsoDocumentChunk> findActiveByCategory(@Param("category") String category);
+
+    @Query("SELECT DISTINCT c.documentName, c.category, c.documentCode FROM IsoDocumentChunk c WHERE (c.status IS NULL OR c.status = 'ACTIVO') ORDER BY c.category, c.documentName")
     List<Object[]> findDistinctDocumentSummaries();
 }

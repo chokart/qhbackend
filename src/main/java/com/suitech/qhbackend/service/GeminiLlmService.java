@@ -71,8 +71,9 @@ public class GeminiLlmService {
 
         try {
             StringBuilder contextBuilder = new StringBuilder();
-            contextBuilder.append("Eres el Asistente Técnico y de Seguridad en Salud Ocupacional (ISO 45001) para la operación QH Relavera.\n");
-            contextBuilder.append("Responde a la consulta del usuario de forma profesional, clara y precisa, basada ESTRICTAMENTE en la información de los siguientes documentos de la carpeta ISO 45001:\n\n");
+            contextBuilder.append("ROL Y OBJETIVO:\n");
+            contextBuilder.append("Eres el Consultor Senior de Seguridad y Salud en el Trabajo (SST ISO 45001) para la operación industrial y minera QH Relavera.\n");
+            contextBuilder.append("Tu responsabilidad es brindar respuestas estrictas, de alta precisión técnica y CERO ALUCINACIONES basadas exclusivamente en la documentación oficial provista.\n\n");
 
             if (history != null && !history.isEmpty()) {
                 contextBuilder.append("--- HISTORIAL DE CONVERSACIÓN RECIENTE DE ESTA SESIÓN ---\n");
@@ -85,26 +86,26 @@ public class GeminiLlmService {
                 contextBuilder.append("\n");
             }
             
+            contextBuilder.append("--- DOCUMENTOS OFICIALES Y FUENTES DE CONOCIMIENTO EXTRAÍDAS ---\n");
             for (int i = 0; i < sources.size(); i++) {
                 SourceCitation src = sources.get(i);
-                contextBuilder.append(String.format("--- FUENTE %d ---\n", i + 1));
+                contextBuilder.append(String.format("FUENTES [%d]:\n", i + 1));
                 contextBuilder.append("Documento: ").append(src.getDocumentName()).append("\n");
-                if (src.getDocumentCode() != null) {
-                    contextBuilder.append("Código: ").append(src.getDocumentCode()).append("\n");
-                }
-                contextBuilder.append("Categoría: ").append(src.getCategory()).append("\n");
-                if (src.getPageNumber() != null) {
-                    contextBuilder.append("Página: ").append(src.getPageNumber()).append("\n");
-                }
-                contextBuilder.append("Contenido:\n").append(src.getExcerpt()).append("\n\n");
+                if (src.getDocumentCode() != null) contextBuilder.append("Código Oficial: ").append(src.getDocumentCode()).append("\n");
+                if (src.getRevision() != null) contextBuilder.append("Revisión/Versión: ").append(src.getRevision()).append("\n");
+                if (src.getArea() != null) contextBuilder.append("Área Operativa: ").append(src.getArea()).append("\n");
+                if (src.getSection() != null) contextBuilder.append("Sección: ").append(src.getSection()).append("\n");
+                if (src.getSectionTitle() != null) contextBuilder.append("Título Sección: ").append(src.getSectionTitle()).append("\n");
+                if (src.getPageNumber() != null) contextBuilder.append("Página: ").append(src.getPageNumber()).append("\n");
+                contextBuilder.append("Contenido de la Fuente:\n").append(src.getExcerpt()).append("\n----------------------------------------\n");
             }
 
-            contextBuilder.append("PREGUNTA DEL USUARIO: ").append(query).append("\n\n");
-            contextBuilder.append("INSTRUCCIONES:\n");
-            contextBuilder.append("1. Responde de forma completa, estructurada y detallada usando formato Markdown (títulos, listas numeradas, viñetas, negritas).\n");
-            contextBuilder.append("2. Detalla siempre los Pasos de Ejecución completos, los EPPs obligatorios, las Herramientas y las Medidas de Control descritas en las fuentes.\n");
-            contextBuilder.append("3. Cita explícitamente los códigos de PETS/IPERC o nombres de estándares cuando menciones procedimientos o controles.\n");
-            contextBuilder.append("4. No trunques ni resumas en exceso la respuesta; proporciona la explicación técnica completa.");
+            contextBuilder.append("\nPREGUNTA DEL USUARIO: ").append(query).append("\n\n");
+            contextBuilder.append("INSTRUCCIONES OBLIGATORIAS DE SEGURIDAD SST:\n");
+            contextBuilder.append("1. **Basado Estrictamente en Fuentes**: Responde ÚNICAMENTE con la información provista en las Fuentes arriba indexadas. Está estrictamente PROHIBIDO inventar pasos de procedimientos, EPPs, responsabilidades o controles de seguridad.\n");
+            contextBuilder.append("2. **Información No Encontrada**: Si la consulta no puede responderse con el contexto provisto, responde exactamente: 'La información solicitada no se encuentra explícitamente detallada en los documentos oficiales indexados de la operación.'\n");
+            contextBuilder.append("3. **Citas Normativas Precisas**: Al mencionar cualquier instrucción, EPP o control, cita la fuente indicando el Código del Documento, Revisión, Sección y Página (ejemplo: `[PETS-021 | Rev. 03 | § 4.2 | Pág. 3]`).\n");
+            contextBuilder.append("4. **Estructura Clara**: Utiliza formato Markdown profesional (títulos, listas numeradas para pasos de PETS, listas con viñetas para EPPs y controles de IPERC).\n");
 
             Map<String, Object> textPart = new HashMap<>();
             textPart.put("text", contextBuilder.toString());
@@ -116,7 +117,7 @@ public class GeminiLlmService {
             requestBody.put("contents", Collections.singletonList(contentObj));
 
             Map<String, Object> generationConfig = new HashMap<>();
-            generationConfig.put("temperature", 0.2);
+            generationConfig.put("temperature", 0.1);
             generationConfig.put("maxOutputTokens", 4000);
             requestBody.put("generationConfig", generationConfig);
 
